@@ -641,7 +641,7 @@ describe.each([
 
                 expect(res._getStatusCode()).toBe(200);
                 expect(res._getJSONData()).toEqual({
-                    message: `Read MFA code: ${code}`,
+                    message: `Read MFA code`,
                 });
 
                 expect(mfaReceivedEvent).toHaveBeenCalledWith(new MFAMethod(`device`), code);

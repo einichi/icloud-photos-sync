@@ -136,9 +136,9 @@ export class StateManager {
                     progress: 2 * (this.prevTrigger === StateTrigger.AUTH ? 12.5 : 1)
                 });
             })
-            .on(iCPSEventMFA.MFA_RECEIVED, (method: MFAMethod, code: string) => {
+            .on(iCPSEventMFA.MFA_RECEIVED, (method: MFAMethod) => {
                 this.updateState(StateType.BLOCKED, {
-                    progressMsg: `MFA code received from ${method.toString()} (${code})`, 
+                    progressMsg: `MFA code received from ${method.toString()}`,
                     progress: 2 * (this.prevTrigger === StateTrigger.AUTH ? 12.5 : 1)
                 });
             })

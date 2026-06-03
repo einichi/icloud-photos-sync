@@ -89,6 +89,9 @@ export class iCloud {
     async authenticate(): Promise<boolean> {
         const ready = this.getReady();
         Resources.logger(this).info(`Authenticating user`);
+        Resources.logger(this).info(Resources.manager().trustToken
+            ? `Using stored iCloud trust token for authentication`
+            : `No stored iCloud trust token available; MFA may be required`);
         Resources.emit(iCPSEventCloud.AUTHENTICATION_STARTED);
 
         const config: AxiosRequestConfig = {
@@ -161,6 +164,15 @@ export class iCloud {
     }
 
     /**
+     * Gets the stored trust token as an auth payload array.
+     * @returns An array containing the trust token if present, otherwise an empty array
+     */
+    private getTrustTokens(): string[] {
+        const trustToken = Resources.manager().trustToken;
+        return trustToken ? [trustToken] : [];
+    }
+
+    /**
      * Generates the legacy plain-text login payload and url
      * @returns A tuple containing the url and payload required for the legacy login method
      */
@@ -171,9 +183,7 @@ export class iCloud {
             {
                 accountName: Resources.manager().username,
                 password: Resources.manager().password,
-                trustTokens: [
-                    Resources.manager().trustToken,
-                ],
+                trustTokens: this.getTrustTokens(),
             },
         ];
     }
@@ -204,9 +214,7 @@ export class iCloud {
                 ENDPOINTS.AUTH.BASE + ENDPOINTS.AUTH.PATH.SIGNIN.COMPLETE,
                 {
                     accountName: Resources.manager().username,
-                    trustTokens: [
-                        Resources.manager().trustToken,
-                    ],
+                    trustTokens: this.getTrustTokens(),
                     m1: m1Proof,
                     m2: m2Proof,
                     c: validatedInitResponse.data.c,
@@ -273,7 +281,7 @@ export class iCloud {
      */
     async submitMFA(method: MFAMethod, mfa: string) {
         try {
-            Resources.logger(this).info(`Authenticating MFA with code ${mfa}`);
+            Resources.logger(this).info(`Authenticating MFA code`);
 
             const url = method.getEnterURL();
             const config: AxiosRequestConfig = {
@@ -281,7 +289,7 @@ export class iCloud {
             };
             const data = method.getEnterPayload(mfa);
 
-            Resources.logger(this).debug(`Entering MFA code via URL ${url} with data ${jsonc.stringify(data)}`);
+            Resources.logger(this).debug(`Entering MFA code via URL ${url} with redacted payload`);
             await Resources.network().post(url, data, config);
 
             Resources.logger(this).info(`MFA code correct!`);

@@ -126,7 +126,7 @@ describe(`State changes`, () => {
                 prevError: undefined,
                 prevTrigger: `sync`,
                 progress: 2,
-                progressMsg: `MFA code received from device (123)`
+                progressMsg: `MFA code received from device`
             } as SerializedState
         },{
             desc: `Should handle MFA received (triggered by auth)`,
@@ -137,7 +137,7 @@ describe(`State changes`, () => {
                 prevError: undefined,
                 prevTrigger: `auth`,
                 progress: 25,
-                progressMsg: `MFA code received from device (123)`
+                progressMsg: `MFA code received from device`
             } as SerializedState
         },{
             desc: `Should handle authenticated (triggered by sync)`,

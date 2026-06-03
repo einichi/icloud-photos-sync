@@ -373,7 +373,7 @@ export class WebServer {
      * Credentials supplied here are only kept in memory for the lifetime of this process.
      */
     handleCredentialsRequest(_url: URL, body: string = ``): WebServerResponse {
-        let check = this.handleInProgress();
+        const check = this.handleInProgress();
         if (check) {
             return check;
         }
@@ -558,7 +558,7 @@ export class WebServer {
 
         const mfa: string = url.search.match(/code=(\d{6})/)[1]
 
-        Resources.logger(this).debug(`Received MFA: ${mfa}`);
+        Resources.logger(this).debug(`Received MFA code`);
         Resources.emit(iCPSEventMFA.MFA_RECEIVED, this.mfaMethod, mfa);
         return {
             code: 200,
@@ -566,7 +566,7 @@ export class WebServer {
                 "Content-Type": `application/json`
             },
             body: {
-                message: `Read MFA code: ${mfa}`
+                message: `Read MFA code`
             }
         }
     }

@@ -30,6 +30,11 @@ type PhotosQueryPage = {
     continuationMarker?: string
 }
 
+type PhotosQueryResult = {
+    records: any[],
+    usedContinuation: boolean
+}
+
 /**
  * This class holds connection and state with the iCloud Photos Backend and provides functions to access the data stored there
  */
@@ -177,16 +182,35 @@ export class iCloudPhotos {
      * @throws An iCPSError if the query fails
      */
     async performQuery(zone: QueryBuilder.Zones, recordType: string, filterBy?: any[], resultsLimit?: number, desiredKeys?: string[]): Promise<any[]> {
+        return (await this.performQueryWithPagination(zone, recordType, filterBy, resultsLimit, desiredKeys)).records;
+    }
+
+    /**
+     * Performs a query and tracks whether the backend used continuation marker pagination.
+     * @param zone - Defines the zone to be used
+     * @param recordType - The requested record type
+     * @param filterBy - An array of filter instructions
+     * @param resultsLimit - Results limit for each backend page
+     * @param desiredKeys - The fields requested from the backend
+     * @returns The returned records and whether a continuation marker was followed
+     * @throws An iCPSError if the query fails
+     */
+    private async performQueryWithPagination(zone: QueryBuilder.Zones, recordType: string, filterBy?: any[], resultsLimit?: number, desiredKeys?: string[]): Promise<PhotosQueryResult> {
         const records: any[] = [];
         let continuationMarker: string | undefined;
+        let usedContinuation = false;
 
         do {
             const page = await this.performQueryPage(zone, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker);
             records.push(...page.records);
+            usedContinuation = usedContinuation || Boolean(page.continuationMarker);
             continuationMarker = page.continuationMarker;
         } while (continuationMarker);
 
-        return records;
+        return {
+            records,
+            usedContinuation,
+        };
     }
 
     /**
@@ -605,7 +629,7 @@ export class iCloudPhotos {
      * @param albumId - The record name of the album, if undefined all pictures will be returned
      * @returns Picture records for the requested page
      */
-    async fetchPictureRecordsPageForZone(zone: QueryBuilder.Zones, index: number, albumId?: string): Promise<any[]> {
+    async fetchPictureRecordsPageForZone(zone: QueryBuilder.Zones, index: number, albumId?: string): Promise<PhotosQueryResult> {
         const startRank = albumId === undefined // The start rank always refers to the tuple/triple of records, therefore we need to adjust the start rank based on the amount of records returned
             ? index * Math.floor(MAX_RECORDS_LIMIT / 2)
             : index * Math.floor(MAX_RECORDS_LIMIT / 3);
@@ -614,7 +638,7 @@ export class iCloudPhotos {
         const directionFilter = QueryBuilder.getDirectionFilterForDirection();
 
         if (albumId === undefined) {
-            return this.performQuery(
+            return this.performQueryWithPagination(
                 zone,
                 QueryBuilder.RECORD_TYPES.ALL_PHOTOS,
                 [startRankFilter, directionFilter],
@@ -624,7 +648,7 @@ export class iCloudPhotos {
         }
 
         const parentFilter = QueryBuilder.getParentFilterForParentId(albumId);
-        return this.performQuery(
+        return this.performQueryWithPagination(
             zone,
             QueryBuilder.RECORD_TYPES.PHOTO_RECORDS,
             [startRankFilter, directionFilter, parentFilter],
@@ -686,8 +710,14 @@ export class iCloudPhotos {
         const allRecords: any[] = [];
         for (let index = 0; index < numberOfRequests; index++) {
             Resources.logger(this).info(`Fetching iCloud photo metadata page ${index + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library`);
-            allRecords.push(...await this.fetchPictureRecordsPageForZone(zone, index, parentId));
+            const page = await this.fetchPictureRecordsPageForZone(zone, index, parentId);
+            allRecords.push(...page.records);
             Resources.logger(this).info(`Fetched iCloud photo metadata page ${index + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library (${allRecords.length} raw records accumulated)`);
+
+            if (page.usedContinuation) {
+                Resources.logger(this).info(`iCloud used continuation marker pagination for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library; skipping remaining synthetic startRank pages`);
+                break;
+            }
         }
 
         Resources.logger(this).info(`Fetched ${allRecords.length} raw iCloud photo metadata records for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library in ${Date.now() - startedAt}ms`);

@@ -103,8 +103,8 @@ export class CLIInterface {
             .on(iCPSEventMFA.MFA_RESEND, (method: MFAMethod) => {
                 this.print(chalk.white(`Resending MFA code via ${method.toString()}...`));
             })
-            .on(iCPSEventMFA.MFA_RECEIVED, (method: MFAMethod, code: string) => {
-                this.print(chalk.white(`MFA code received from ${method.toString()} (${code})`));
+            .on(iCPSEventMFA.MFA_RECEIVED, (method: MFAMethod) => {
+                this.print(chalk.white(`MFA code received from ${method.toString()}`));
             })
             .on(iCPSEventMFA.MFA_NOT_PROVIDED, () => {
                 this.print(chalk.yellowBright(`MFA code not provided in time, aborting...`));
@@ -119,8 +119,8 @@ export class CLIInterface {
             });
 
         Resources.events(this)
-            .on(iCPSEventApp.TOKEN, token => {
-                this.print(chalk.green(`Validated token:\n${token}`));
+            .on(iCPSEventApp.TOKEN, () => {
+                this.print(chalk.green(`Validated iCloud trust token`));
             })
             .on(iCPSEventApp.SCHEDULED, (next: Date) => {
                 this.print(chalk.white(this.getHorizontalLine()));

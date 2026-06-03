@@ -395,6 +395,7 @@ export class NetworkManager {
      */
     applyTrustResponse(trustResponse: TrustResponse) {
         Resources.manager().trustToken = trustResponse.headers[`x-apple-twosv-trust-token`];
+        Resources.logger(this).info(`Stored updated iCloud trust token for future MFA reuse`);
         this.sessionToken = trustResponse.headers[`x-apple-session-token`];
     }
 
