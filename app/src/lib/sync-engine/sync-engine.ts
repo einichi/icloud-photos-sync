@@ -71,10 +71,15 @@ export class SyncEngine {
                 await Resources.network().settleCCYLimiter();
 
                 Resources.logger(this).debug(`Refreshing iCloud connection...`);
-                const iCloudReady = this.icloud.getReady();
-                this.icloud.setupAccount();
-                if (!await iCloudReady) {
-                    return [[], []];
+                try {
+                    const iCloudReady = this.icloud.getReady();
+                    await this.icloud.setupAccount();
+                    if (!await iCloudReady) {
+                        return [[], []];
+                    }
+                } catch (refreshErr) {
+                    retryError.addContext(`error-try-${retryCount - 1}-refresh`, refreshErr);
+                    Resources.logger(this).warn(`Unable to refresh iCloud connection before retry: ${iCPSError.toiCPSError(refreshErr).getDescription()}`);
                 }
             }
         }

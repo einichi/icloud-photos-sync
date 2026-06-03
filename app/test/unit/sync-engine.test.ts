@@ -176,6 +176,33 @@ describe(`Coordination`, () => {
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(1);
             expect(doneEvent).not.toHaveBeenCalled();
         });
+
+        test(`Continues retrying when refreshing iCloud connection fails`, async () => {
+            syncEngine.icloud.getReady = jest.fn<typeof syncEngine.icloud.getReady>()
+                .mockRejectedValueOnce(new AxiosError(`Service unavailable`, `ERR_BAD_RESPONSE`, undefined, undefined, {status: 503} as AxiosResponse));
+
+            const error = new AxiosError(`Service unavailable`, `ERR_BAD_RESPONSE`, undefined, undefined, {status: 503} as AxiosResponse);
+
+            const retryEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.RETRY);
+            const doneEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.DONE);
+            syncEngine.fetchAndLoadState = jest.fn<typeof syncEngine.fetchAndLoadState>()
+                .mockResolvedValue(fetchAndLoadStateReturnValue);
+            syncEngine.diffState = jest.fn<typeof syncEngine.diffState>()
+                .mockResolvedValue(diffStateReturnValue);
+            syncEngine.writeState = jest.fn<typeof syncEngine.writeState>()
+                .mockRejectedValueOnce(error)
+                .mockResolvedValueOnce();
+
+            await syncEngine.sync();
+
+            expect(retryEvent).toHaveBeenCalledWith(2, new iCPSError(SYNC_ERR.NETWORK));
+            expect(syncEngine.fetchAndLoadState).toHaveBeenCalledTimes(2);
+            expect(syncEngine.diffState).toHaveBeenCalledTimes(2);
+            expect(syncEngine.writeState).toHaveBeenCalledTimes(2);
+            expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(1);
+            expect(doneEvent).toHaveBeenCalledTimes(1);
+        });
     });
 
     test(`Fetch & Load State`, async () => {
