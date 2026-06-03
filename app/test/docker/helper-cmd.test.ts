@@ -20,11 +20,11 @@ with archiving capabilities
 Options:
   -V, --version                    output the version number
   -u, --username <string>          AppleID username. Omitting the option will
-                                   result in the CLI to ask for user input
-                                   before startup. (env: APPLE_ID_USER)
+                                   allow credentials to be supplied from the Web
+                                   UI after startup. (env: APPLE_ID_USER)
   -p, --password <string>          AppleID password. Omitting the option will
-                                   result in the CLI to ask for user input
-                                   before startup. (env: APPLE_ID_PWD)
+                                   allow credentials to be supplied from the Web
+                                   UI after startup. (env: APPLE_ID_PWD)
   -T, --trust-token <string>       The trust token for authentication. If not
                                    provided, the trust token is read from the
                                    \`.icloud-photos-sync\` resource file in data

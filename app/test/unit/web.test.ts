@@ -433,6 +433,27 @@ describe.each([
 
         })
 
+        test(`Pre-Condition credentials missing`, async () => {
+            mockedResourceManager._resources.credentialsProvidedAtStartup = false;
+            mockedResourceManager._resources.username = undefined!;
+            mockedResourceManager._resources.password = undefined!;
+            webServer.triggerReauth = jest.fn<typeof webServer.triggerReauth>().mockResolvedValue(``)
+            const warnEvent = mockedEventManager.spyOnEvent(iCPSEventRuntimeWarning.WEB_SERVER_ERROR)
+            const req = createRequest<IncomingMessage>({
+                method: `POST`,
+                url: `${webBasePath}/api/reauthenticate`
+            })
+
+            const res = await sendMockedRequest(webServer, req)
+
+            expect(res._getStatusCode()).toBe(412);
+            expect(res._getJSONData()).toEqual({
+                message: `Apple ID credentials must be provided first`,
+            });
+            expect(webServer.triggerReauth).not.toHaveBeenCalled()
+            expect(warnEvent).toHaveBeenCalledWith(new Error(`Apple ID credentials have not been provided`))
+        })
+
         test(`Trigger reauth run's Token App`, async () => {
             const tokenApp = {
                 run: jest.fn<typeof tokenApp.run>().mockResolvedValue(`test`)
@@ -440,6 +461,103 @@ describe.each([
 
             await expect(webServer.triggerReauth(tokenApp)).resolves.toBe(`test`)
             expect(tokenApp.run).toHaveBeenCalled()
+        })
+    });
+
+    describe(`Credentials request`, () => {
+        beforeEach(() => {
+            mockedResourceManager._resources.credentialsProvidedAtStartup = false;
+            mockedResourceManager._resources.username = undefined!;
+            mockedResourceManager._resources.password = undefined!;
+            mockedResourceManager._writeResourceFile.mockReset();
+            webServer.triggerReauth = jest.fn<typeof webServer.triggerReauth>().mockResolvedValue(``)
+        })
+
+        test(`Accepts credentials in memory and starts authentication`, async () => {
+            const reauthEvent = mockedEventManager.spyOnEvent(iCPSEventWebServer.REAUTH_REQUESTED)
+            const req = createRequest<IncomingMessage>({
+                method: `POST`,
+                url: `${webBasePath}/api/credentials`,
+                data: JSON.stringify({
+                    username: `web@icloud.com`,
+                    password: `webPass`,
+                })
+            })
+
+            const res = await sendMockedRequest(webServer, req)
+
+            expect(res._getStatusCode()).toBe(200);
+            expect(res._getJSONData()).toEqual({
+                message: `Credentials accepted; authentication requested`,
+            });
+            expect(mockedResourceManager.username).toEqual(`web@icloud.com`);
+            expect(mockedResourceManager.password).toEqual(`webPass`);
+            expect(mockedResourceManager._writeResourceFile).toHaveBeenCalledTimes(0);
+            expect(webServer.triggerReauth).toHaveBeenCalled();
+            expect(reauthEvent).toHaveBeenCalled();
+        })
+
+        test(`Rejects invalid credential payload`, async () => {
+            const req = createRequest<IncomingMessage>({
+                method: `POST`,
+                url: `${webBasePath}/api/credentials`,
+                data: JSON.stringify({
+                    username: `web@icloud.com`,
+                    password: ``,
+                })
+            })
+
+            const res = await sendMockedRequest(webServer, req)
+
+            expect(res._getStatusCode()).toBe(400);
+            expect(res._getJSONData()).toEqual({
+                message: `Invalid credential payload`,
+            });
+            expect(webServer.triggerReauth).not.toHaveBeenCalled();
+        })
+
+        test(`Rejects credentials when startup credentials are present`, async () => {
+            mockedResourceManager._resources.credentialsProvidedAtStartup = true;
+            mockedResourceManager._resources.username = `startup@icloud.com`;
+            mockedResourceManager._resources.password = `startupPass`;
+            const req = createRequest<IncomingMessage>({
+                method: `POST`,
+                url: `${webBasePath}/api/credentials`,
+                data: JSON.stringify({
+                    username: `web@icloud.com`,
+                    password: `webPass`,
+                })
+            })
+
+            const res = await sendMockedRequest(webServer, req)
+
+            expect(res._getStatusCode()).toBe(409);
+            expect(res._getJSONData()).toEqual({
+                message: `Apple ID credentials were provided at startup`,
+            });
+            expect(mockedResourceManager.username).toEqual(`startup@icloud.com`);
+            expect(mockedResourceManager.password).toEqual(`startupPass`);
+            expect(webServer.triggerReauth).not.toHaveBeenCalled();
+        })
+
+        test(`Pre-Condition not met`, async () => {
+            mockedState.state = StateType.RUNNING
+            const req = createRequest<IncomingMessage>({
+                method: `POST`,
+                url: `${webBasePath}/api/credentials`,
+                data: JSON.stringify({
+                    username: `web@icloud.com`,
+                    password: `webPass`,
+                })
+            })
+
+            const res = await sendMockedRequest(webServer, req)
+
+            expect(res._getStatusCode()).toBe(412);
+            expect(res._getJSONData()).toEqual({
+                message: `Cannot perform action while sync is in progress`,
+            });
+            expect(webServer.triggerReauth).not.toHaveBeenCalled();
         })
     });
 
@@ -477,6 +595,25 @@ describe.each([
             });
             expect(warnEvent).toHaveBeenCalledWith(new Error(`Cannot perform action while sync is in progress`))
 
+        })
+
+        test(`Pre-Condition credentials missing`, async () => {
+            mockedResourceManager._resources.credentialsProvidedAtStartup = false;
+            mockedResourceManager._resources.username = undefined!;
+            mockedResourceManager._resources.password = undefined!;
+            const warnEvent = mockedEventManager.spyOnEvent(iCPSEventRuntimeWarning.WEB_SERVER_ERROR)
+            const req = createRequest<IncomingMessage>({
+                method: `POST`,
+                url: `${webBasePath}/api/sync`
+            })
+
+            const res = await sendMockedRequest(webServer, req)
+
+            expect(res._getStatusCode()).toBe(412);
+            expect(res._getJSONData()).toEqual({
+                message: `Apple ID credentials must be provided first`,
+            });
+            expect(warnEvent).toHaveBeenCalledWith(new Error(`Apple ID credentials have not been provided`))
         })
     });
 
@@ -854,6 +991,55 @@ describe.each([
 
                 expect(getByTestId(site.body, `next-sync-text`)).toBeVisible();
                 expect(getByTestId(site.body, `next-sync-text`)).toHaveTextContent(`Next sync scheduled at1/1/1970, 12:00:01 AM`);
+            })
+
+            test(`Handle 'ready' without credentials`, async () => {
+                mockedResourceManager._resources.credentialsProvidedAtStartup = false;
+                mockedResourceManager._resources.username = undefined!;
+                mockedResourceManager._resources.password = undefined!;
+                mockedEventManager.emit(iCPSEventApp.SCHEDULED, new Date(1000))
+                mockedState.timestamp = 1000
+                await site.load(`${webBasePath}/state`)
+
+                await site.dom.window.refreshState()
+
+                expect(getByTestId(site.body, `unknown-symbol`)).toBeVisible();
+                expect(getByTestId(site.body, `ok-symbol`)).not.toBeVisible();
+                expect(getByTestId(site.body, `error-symbol`)).not.toBeVisible();
+                expect(getByTestId(site.body, `running-symbol`)).not.toBeVisible();
+
+                expect(getByTestId(site.body, `credential-container`)).toBeVisible();
+                expect(getByTestId(site.body, `sync-button`)).not.toBeVisible();
+                expect(getByTestId(site.body, `reauth-button`)).not.toBeVisible();
+
+                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Apple ID credentials are required after each service restart.`);
+            })
+
+            test(`Submits credentials`, async () => {
+                mockedResourceManager._resources.credentialsProvidedAtStartup = false;
+                mockedResourceManager._resources.username = undefined!;
+                mockedResourceManager._resources.password = undefined!;
+                webServer.triggerReauth = jest.fn<typeof webServer.triggerReauth>().mockResolvedValue(``)
+                await site.load(`${webBasePath}/state`)
+                await site.dom.window.refreshState()
+
+                const username = getByTestId(site.body, `credential-username`) as HTMLInputElement;
+                const password = getByTestId(site.body, `credential-password`) as HTMLInputElement;
+                username.value = `web@icloud.com`;
+                password.value = `webPass`;
+
+                getByTestId(site.body, `credential-submit-button`).click()
+
+                expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/credentials`, {
+                    method: `POST`,
+                    headers: {
+                        "Content-Type": `application/json`
+                    },
+                    body: JSON.stringify({
+                        username: `web@icloud.com`,
+                        password: `webPass`
+                    })
+                })
             })
 
             test(`Handle 'ready' state with previous error triggered by sync`, async () => {

@@ -9,8 +9,6 @@ services:
     container_name: photos-sync
     user: <uid>:<gid> 
     environment:
-      APPLE_ID_USER: "<iCloud Username>"
-      APPLE_ID_PWD: "<iCloud Password>"
       TZ: "Europe/Berlin"                                                       
       SCHEDULE: "* 2 * * *"
       ENABLE_CRASH_REPORTING: true
@@ -47,3 +45,5 @@ volumes:
     db:
     cache:
 ```
+
+Apple ID credentials can be entered from the `icloud-photos-sync` Web UI after startup. They are kept in memory only and must be entered again after every service restart. If you prefer unattended startup, set `APPLE_ID_USER` and `APPLE_ID_PWD` in the environment; those startup credentials take precedence over Web UI credentials.

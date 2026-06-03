@@ -8,7 +8,7 @@ import {PhotosLibrary} from "../lib/photos-library/photos-library.js";
 import {iCPSEventApp, iCPSEventCloud, iCPSEventPhotos, iCPSEventRuntimeError, iCPSEventWebServer} from "../lib/resources/events-types.js";
 import {Resources} from "../lib/resources/main.js";
 import {SyncEngine} from "../lib/sync-engine/sync-engine.js";
-import {APP_ERR, AUTH_ERR, LIBRARY_ERR} from "./error/error-codes.js";
+import {APP_ERR, AUTH_ERR, LIBRARY_ERR, RESOURCES_ERR} from "./error/error-codes.js";
 import {iCPSError} from "./error/error.js";
 
 /**
@@ -102,6 +102,10 @@ abstract class iCloudApp extends iCPSApp {
      * @throws An iCPSError in case an error occurs
      */
     async run(): Promise<unknown> {
+        if (!Resources.manager().hasCredentials) {
+            throw new iCPSError(RESOURCES_ERR.NO_CREDENTIALS);
+        }
+
         try {
             await this.acquireLibraryLock();
         } catch (err) {

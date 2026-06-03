@@ -12,6 +12,11 @@ import { PushSubscription } from "./web-server-types.js";
 import webpush from 'web-push'
 import {LogLevel} from "./state-manager.js";
 
+export type AppleCredentials = {
+    username: string,
+    password: string
+}
+
 /**
  * This class handles access to the .icloud-photos-sync resource file and handles currently applied configurations from the CLI and environment variables
  */
@@ -210,17 +215,55 @@ export class ResourceManager {
     }
 
     /**
+     * @returns True if complete Apple ID credentials are currently available in memory.
+     */
+    get hasCredentials(): boolean {
+        return Boolean(this._resources.username && this._resources.password);
+    }
+
+    /**
+     * @returns True if complete Apple ID credentials were supplied at process startup.
+     */
+    get credentialsProvidedAtStartup(): boolean {
+        return Boolean(this._resources.credentialsProvidedAtStartup);
+    }
+
+    /**
+     * Stores Apple ID credentials in memory for this process only.
+     * Startup credentials are treated as authoritative and cannot be replaced from the Web UI.
+     * @param credentials - The credentials to store
+     * @returns True if the credentials were accepted, false if startup credentials are already present
+     */
+    setCredentials(credentials: AppleCredentials): boolean {
+        if (this.credentialsProvidedAtStartup) {
+            return false;
+        }
+
+        this._resources.username = credentials.username;
+        this._resources.password = credentials.password;
+        return true;
+    }
+
+    /**
      * @returns The iCloud username
+     * @throws If no complete credentials are set
      */
     get username(): string {
-        return this._resources.username;
+        if (!this.hasCredentials) {
+            throw new iCPSError(RESOURCES_ERR.NO_CREDENTIALS);
+        }
+        return this._resources.username!;
     }
 
     /**
      * @returns The iCloud user password
+     * @throws If no complete credentials are set
      */
     get password(): string {
-        return this._resources.password;
+        if (!this.hasCredentials) {
+            throw new iCPSError(RESOURCES_ERR.NO_CREDENTIALS);
+        }
+        return this._resources.password!;
     }
 
     /**

@@ -32,6 +32,25 @@ export const stateViewCSS = `
 #next-sync-text {
     text-align: center;
 }
+.credential-container {
+    width: 80%;
+    max-width: 24rem;
+    margin: 1rem auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.credential-container input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.75rem;
+    border: 1px solid #9aa3b2;
+    border-radius: 0.25rem;
+    font-size: 1rem;
+}
+.credential-container button {
+    width: 100%;
+}
 #enter-mfa-section {
     text-align: center;
     width: 90%;
@@ -84,6 +103,12 @@ export const stateViewCSSDark = `
 }
 
 #state-text {
+    color: #e0e0e0;
+}
+
+.credential-container input {
+    background-color: #222;
+    border-color: #555;
     color: #e0e0e0;
 }
     

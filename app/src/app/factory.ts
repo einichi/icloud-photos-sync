@@ -1,4 +1,3 @@
-import {input, password} from "@inquirer/prompts";
 import {Command, CommanderError, InvalidArgumentError, Option} from "commander";
 import {Cron} from "croner";
 import {Resources} from "../lib/resources/main.js";
@@ -99,20 +98,13 @@ function commanderParseUrl(value: string, _dummyPrevious?: unknown): string {
 }
 
 /**
- * Extracts the options from the parsed commander command - and asks for user input in case it is necessary
+ * Extracts the options from the parsed commander command.
  * @param parsedCommand - The parsed commander command returned from callback in Command.action((_, command any)
  * @returns Validated iCPSAppOptions
  */
 async function completeConfigurationOptionsFromCommand(parsedCommand: unknown): Promise<iCPSAppOptions> {
     const opts = (parsedCommand as any).parent?.opts() as iCPSAppOptions;
-
-    while (!opts.username || opts.username.length === 0) {
-        opts.username = await input({message: `Please enter your AppleID username`});
-    }
-
-    while (!opts.password || opts.password.length === 0) {
-        opts.password = await password({message: `Please enter your AppleID password`, mask: `*`});
-    }
+    opts.credentialsProvidedAtStartup = Boolean(opts.username && opts.password);
 
     return opts;
 }
@@ -121,8 +113,9 @@ async function completeConfigurationOptionsFromCommand(parsedCommand: unknown): 
  * Typed available app options
  */
 export type iCPSAppOptions = {
-    username: string,
-    password: string,
+    username?: string,
+    password?: string,
+    credentialsProvidedAtStartup?: boolean,
     trustToken?: string,
     dataDir: string,
     port: number,
@@ -164,10 +157,10 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
         .description(Resources.PackageInfo.description)
         .version(Resources.PackageInfo.version)
         .addHelpText(`after`, `\nFind the full documentation at https://icps.steiler.dev/`)
-        .addOption(new Option(`-u, --username <string>`, `AppleID username. Omitting the option will result in the CLI to ask for user input before startup.`)
+        .addOption(new Option(`-u, --username <string>`, `AppleID username. If omitted, credentials can be supplied from the Web UI after startup.`)
             .env(`APPLE_ID_USER`)
             .makeOptionMandatory(false))
-        .addOption(new Option(`-p, --password <string>`, `AppleID password. Omitting the option will result in the CLI to ask for user input before startup.`)
+        .addOption(new Option(`-p, --password <string>`, `AppleID password. If omitted, credentials can be supplied from the Web UI after startup.`)
             .env(`APPLE_ID_PWD`)
             .makeOptionMandatory(false))
         .addOption(new Option(`-T, --trust-token <string>`, `The trust token for authentication. If not provided, the trust token is read from the \`.icloud-photos-sync\` resource file in data dir. If no stored trust token could be loaded, a new trust token will be acquired (requiring the input of an MFA code).`)

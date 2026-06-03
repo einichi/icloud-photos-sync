@@ -470,9 +470,12 @@ export class ErrorHandler {
      * @returns The string, with masked confidential data
      */
     static maskConfidentialData(input: string): string {
-        return input
-            .replaceAll(Resources.manager().username, `<APPLE ID USERNAME>`)
-            .replaceAll(Resources.manager().password, `<APPLE ID PASSWORD>`)
-            .replaceAll(Resources.manager()._resources.trustToken, `<TRUST TOKEN>`); // Reading cached trust token, instead of re-reading from file
+        return [
+            [Resources.manager()._resources.username, `<APPLE ID USERNAME>`],
+            [Resources.manager()._resources.password, `<APPLE ID PASSWORD>`],
+            [Resources.manager()._resources.trustToken, `<TRUST TOKEN>`], // Reading cached trust token, instead of re-reading from file
+        ]
+            .filter(([value]) => typeof value === `string` && value.length > 0)
+            .reduce((masked, [value, replacement]) => masked.replaceAll(value, replacement), input);
     }
 }

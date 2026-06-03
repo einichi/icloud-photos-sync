@@ -5,8 +5,12 @@ import {iCPSState} from "../../lib/resources/events-types.js";
 
 export class NotificationPusher {
     constructor() {
+        const vapidSubject = Resources.manager().hasCredentials
+            ? `mailto:${Resources.manager().username}`
+            : `mailto:${Resources.PackageInfo.name}@localhost`;
+
         webpush.setVapidDetails(
-            `mailto:${Resources.manager().username}`,
+            vapidSubject,
             Resources.manager().notificationVapidCredentials.publicKey,
             Resources.manager().notificationVapidCredentials.privateKey
         );

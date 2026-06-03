@@ -20,6 +20,11 @@ export class StateView extends View {
 
             <p id="state-text">...</p>
 
+            <form class="credential-container" id="credential-container" style="display: none;" onsubmit="submitCredentials(event)">
+                <input id="credential-username" name="username" type="email" autocomplete="username" placeholder="Apple ID" required />
+                <input id="credential-password" name="password" type="password" autocomplete="current-password" placeholder="Password" required />
+                <button id="credential-submit-button" type="submit">Authenticate</button>
+            </form>
 
             <div class="progress-container" id="progress-container" style="display: none;">
                 <div class="progress-bar" id="progress-bar"></div>

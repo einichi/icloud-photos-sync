@@ -577,10 +577,63 @@ describe(`ResourceManager`, () => {
             test(`should return the username from the resources`, () => {
                 expect(resourceManager.username).toEqual(resources.username);
             });
+
+            test(`should throw if complete credentials are not set`, () => {
+                resourceManager._resources.username = undefined!;
+                expect(() => resourceManager.username).toThrow(/^Apple ID credentials have not been provided$/);
+            });
         });
 
         describe(`password`, () => {
             test(`should return the password from the resources`, () => {
+                expect(resourceManager.password).toEqual(resources.password);
+            });
+
+            test(`should throw if complete credentials are not set`, () => {
+                resourceManager._resources.password = undefined!;
+                expect(() => resourceManager.password).toThrow(/^Apple ID credentials have not been provided$/);
+            });
+        });
+
+        describe(`credentials`, () => {
+            test(`should report credentials as available`, () => {
+                expect(resourceManager.hasCredentials).toBeTruthy();
+            });
+
+            test(`should report credentials as unavailable when username or password is missing`, () => {
+                resourceManager._resources.password = undefined!;
+                expect(resourceManager.hasCredentials).toBeFalsy();
+            });
+
+            test(`should report startup credentials`, () => {
+                expect(resourceManager.credentialsProvidedAtStartup).toBeTruthy();
+            });
+
+            test(`should store web ui credentials in memory when startup credentials are absent`, () => {
+                resourceManager._resources.credentialsProvidedAtStartup = false;
+                resourceManager._resources.username = undefined!;
+                resourceManager._resources.password = undefined!;
+                (resourceManager._writeResourceFile as jest.Mock).mockReset();
+
+                const accepted = resourceManager.setCredentials({
+                    username: `web@icloud.com`,
+                    password: `webPass`,
+                });
+
+                expect(accepted).toBeTruthy();
+                expect(resourceManager.username).toEqual(`web@icloud.com`);
+                expect(resourceManager.password).toEqual(`webPass`);
+                expect(resourceManager._writeResourceFile).not.toHaveBeenCalled();
+            });
+
+            test(`should not replace startup credentials`, () => {
+                const accepted = resourceManager.setCredentials({
+                    username: `web@icloud.com`,
+                    password: `webPass`,
+                });
+
+                expect(accepted).toBeFalsy();
+                expect(resourceManager.username).toEqual(resources.username);
                 expect(resourceManager.password).toEqual(resources.password);
             });
         });

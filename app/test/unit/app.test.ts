@@ -1,7 +1,6 @@
 import {afterEach, beforeAll, beforeEach, describe, expect, jest, test} from '@jest/globals';
 import fs from 'fs';
 import mockfs from 'mock-fs';
-import {stdin} from 'mock-stdin';
 import path from 'path';
 import {appFactory, iCPSAppOptions} from '../../src/app/factory';
 import {ArchiveApp, DaemonApp, SyncApp, TokenApp} from '../../src/app/icloud-app';
@@ -66,35 +65,21 @@ describe(`App Factory`, () => {
         });
     });
 
-    test.each([{
-        desc: `username`,
-        options: [`-p`, `testPass`],
-        stdinValue: `test@icloud.com`,
-        stdOutValue: `Please enter your AppleID username`,
-    }, {
-        desc: `password`,
-        options: [`-u`, `test@icloud.com`],
-        stdinValue: `testPass`,
-        stdOutValue: `Please enter your AppleID password`,
-    }])(`Asking user to provide $desc`, async ({options, stdinValue, stdOutValue}) => {
+    test(`Create Daemon App without prompting for credentials`, async () => {
         const setupSpy = jest.spyOn(Resources, `setup`);
-        const mockStdout = jest.spyOn(process.stdout, `write`).mockImplementation(() => true);
-        const mockStdin = stdin();
+        const {username: _username, password: _password, ...expectedConfig} = Config.defaultConfig;
 
-        const app = appFactory(
-            [
-                `/usr/bin/node`,
-                `/home/icloud-photos-sync/main.js`,
-                ...options,
-                `token`,
-            ],
-        );
+        const app = await appFactory([
+            `/usr/bin/node`,
+            `/home/icloud-photos-sync/main.js`,
+            `daemon`,
+        ]);
 
-        mockStdin.send(`${stdinValue}\n`);
-
-        expect(await app).toBeInstanceOf(TokenApp);
-        expect(mockStdout).toHaveBeenNthCalledWith(1, expect.stringMatching(new RegExp(`${stdOutValue}`)));
-        expect(setupSpy).toHaveBeenCalledWith(Config.defaultConfig);
+        expect(app).toBeInstanceOf(DaemonApp);
+        expect(setupSpy).toHaveBeenCalledWith({
+            ...expectedConfig,
+            credentialsProvidedAtStartup: false,
+        });
     });
 
     test(`Create Token App`, async () => {

@@ -14,7 +14,7 @@ The `latest` tag should always represent the latest stable release, whereas the 
 
     === "docker compose"
         
-        Create a `docker-compose.yml` file, similar to the one below. Please add your Apple ID credentials and desired location of the library on disk. Optionally, add the timezone and your local users' `UID` and `GID`. 
+        Create a `docker-compose.yml` file, similar to the one below. Please add the desired location of the library on disk. Optionally, add the timezone and your local users' `UID` and `GID`.
         
 
         ```
@@ -24,8 +24,6 @@ The `latest` tag should always represent the latest stable release, whereas the 
             container_name: photos-sync
             user: <uid>:<gid> 
             environment:
-              APPLE_ID_USER: "<iCloud Username>"
-              APPLE_ID_PWD: "<iCloud Password>"
               TZ: "Europe/Berlin"                                                       
               SCHEDULE: "0 2 * * *"
               ENABLE_CRASH_REPORTING: true
@@ -35,10 +33,8 @@ The `latest` tag should always represent the latest stable release, whereas the 
               - <photos-dir>:/opt/icloud-photos-library
         ```
 
-        !!! tip "Plain text username/password"
-            If you don't want to store your plain text username and/or password in the docker environment, it is possible to omit the [username](user-guides/cli.md#username) and/or [password](user-guides/cli.md#password) option. In this scenarios, the username/password needs to be provided manually on each startup from the command line.
-            To input the data into the running Docker container it needs to be started with [`tty: true`](https://docs.docker.com/reference/compose-file/services/#tty) and [`stdin_open: true`](https://docs.docker.com/reference/compose-file/services/#stdin_open). Once the container was started, you can attach to the running `icloud-photos-sync` process using [`docker attach photos-sync`](https://docs.docker.com/engine/reference/commandline/attach/), and detach with the sequence `CTRL-p CTRL-q`.
-            To execute a command within the running container (that needs access to the credentials), use `docker exec -it` [to open tty and stdin](https://docs.docker.com/reference/cli/docker/container/exec/#run-docker-exec-on-a-running-container), e.g. `docker exec -it photos-sync token`.
+        !!! tip "Apple ID credentials"
+            Apple ID credentials can be supplied from the Web UI after startup. They are kept in memory only and must be entered again after every service restart. If you prefer unattended startup, set `APPLE_ID_USER` and `APPLE_ID_PWD` in the environment; those startup credentials take precedence over Web UI credentials.
 
         Get the latest image by running:
 
@@ -82,7 +78,7 @@ The `latest` tag should always represent the latest stable release, whereas the 
 
 ## Usage
 
-When launching this application without specifying a command, it will start in daemon mode - executing the synchronization based on the provided cron schedule using the supplied credentials (or prompting for credentials upon startup, in case none are supplied). 
+When launching this application without specifying a command, it will start in daemon mode - executing the synchronization based on the provided cron schedule. If Apple ID credentials are not supplied through environment variables or CLI arguments, provide them from the Web UI after startup. Web UI credentials are only stored in memory and must be entered again after every service restart.
 
 Unfortunately iCloud's application specific passwords don't support access to the iCloud Photos Library - therefore you will need to supply your Apple ID password - Passkeys are not supported.
 
@@ -96,8 +92,6 @@ Unfortunately iCloud's application specific passwords don't support access to th
 
         ```
         docker run -v "</path/to/your/local/library>/library:/opt/icloud-photos-library" --name photos-sync  --user <uid>:<gid> steilerdev/icloud-photos-sync:latest \
-            -u "<iCloud Username>" \
-            -p "<iCloud Password>" \
             --enable-crash-reporting \
             --schedule "* 2 * * *" 
         ```
@@ -108,8 +102,6 @@ Unfortunately iCloud's application specific passwords don't support access to th
 
         ```
         icloud-photos-sync \
-            -u "<iCloud Username>" \
-            -p "<iCloud Password>" \
             -d "</path/to/your/local/library>" \
             --enable-crash-reporting \
             --schedule "* 2 * * *" 
@@ -119,8 +111,6 @@ Unfortunately iCloud's application specific passwords don't support access to th
         
         ```
         npm run execute -- \
-            -u "<iCloud Username>" \
-            -p "<iCloud Password>" \
             -d "</path/to/your/local/library>" \
             --enable-crash-reporting \
             --schedule "* 2 * * *" 
@@ -135,7 +125,7 @@ The primary interface to interact with this application is a WebUI, however conf
 
 Since this application needs full access to a user's iCloud Photos Library, a full authentication with Apple (including Multi-Factor-Authentication) is initially required. While this will acquire a trust token, Apple's system requires refreshing this token every ~30 days by providing a re-authentication utilizing an MFA code.
 
-In order to perform authentication (without syncing any assets) to validate or acquire the trust token, navigate to the WebUI and select `Renew authentication`.
+In order to perform authentication (without syncing any assets) to validate or acquire the trust token, navigate to the WebUI. If credentials were not supplied at startup, enter the Apple ID username and password in the Web UI first; otherwise select `Renew authentication`.
 
 ![Ready](../assets/web-ui/00_ready.png#only-light)
 ![Ready (dark mode)](../assets/web-ui/00_ready-dark.png#only-dark)

@@ -41,6 +41,8 @@ export type LogMessage = {
 export type SerializedState = {
     state: StateType,
     timestamp: number,
+    hasCredentials?: boolean,
+    credentialsProvidedAtStartup?: boolean,
     nextSync?: number,
     prevError?: {
         message: string,
@@ -398,6 +400,8 @@ export class StateManager {
 
         return {
             state: this.state,
+            hasCredentials: Resources.manager().hasCredentials,
+            credentialsProvidedAtStartup: Resources.manager().credentialsProvidedAtStartup,
             nextSync: this.nextSync,
             prevError: error,
             prevTrigger: this.prevTrigger,

@@ -81,6 +81,10 @@ type NetworkResources = {
      * Session secret, either acquired on successful sign in, or after trusting the device
      */
     sessionSecret?: string,
+    /**
+     * Complete Apple ID credentials were supplied when the process started.
+     */
+    credentialsProvidedAtStartup?: boolean,
 }
 
 /**

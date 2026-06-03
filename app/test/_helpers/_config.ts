@@ -5,6 +5,7 @@ import {ZoneArea} from "../../src/lib/resources/resource-types";
 export const defaultConfig = {
     username: `test@icloud.com`,
     password: `testPass`,
+    credentialsProvidedAtStartup: true,
     dataDir: `/opt/icloud-photos-library`,
     port: 80,
     webBasePath: ``,

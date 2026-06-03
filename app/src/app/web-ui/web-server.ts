@@ -3,7 +3,7 @@ import {jsonc} from 'jsonc';
 import {MFAMethod} from '../../lib/icloud/mfa/mfa-method.js';
 import {iCPSEventMFA, iCPSEventRuntimeWarning, iCPSEventWebServer} from '../../lib/resources/events-types.js';
 import {Resources} from '../../lib/resources/main.js';
-import {WEB_SERVER_ERR} from '../error/error-codes.js';
+import {RESOURCES_ERR, WEB_SERVER_ERR} from '../error/error-codes.js';
 import {iCPSError} from '../error/error.js';
 import {TokenApp} from '../icloud-app.js';
 import {faviconBase64, iconBase64} from './assets/icons.js';
@@ -75,6 +75,7 @@ export class WebServer {
             '/api/vapid-public-key': this.handleVapidPublicKeyRequest.bind(this)
         },
         POST: {
+            '/api/credentials': this.handleCredentialsRequest.bind(this),
             '/api/reauthenticate': this.handleReauthRequest.bind(this),
             '/api/mfa': this.handleMFACode.bind(this),
             '/api/resend_mfa': this.handleMFAResend.bind(this),
@@ -155,7 +156,7 @@ export class WebServer {
                 req.url.replace(new RegExp(`^${Resources.manager().webBasePath}`), ``), // Removing the web base path for request matching
                 `http://localhost/` // Necessary, because the req.url is relative
             )
-            const body = await this.readBody(req)
+            const body = await this.readBody(req, url.pathname === `/api/credentials`)
 
             if (req.method === `GET` && url.pathname in this._sitemap.GET) {
                 this.sendResponse(this._sitemap.GET[url.pathname](url, body), res)
@@ -203,7 +204,7 @@ export class WebServer {
         }
     }
 
-    async readBody(req: http.IncomingMessage): Promise<string> {
+    async readBody(req: http.IncomingMessage, redactLog: boolean = false): Promise<string> {
         try {
             if(req.headers[`content-length`] && Number.parseInt(req.headers[`content-length`], 10) > 0) {
                 let body = ``;
@@ -212,7 +213,7 @@ export class WebServer {
                 });
                 await pEvent(req, `end`, {rejectionEvents: [`error`]})
 
-                Resources.logger(this).debug(`Read body: ${body}`)
+                Resources.logger(this).debug(`Read body: ${redactLog ? `<redacted>` : body}`)
                 return body;
             }
             return ``;
@@ -347,12 +348,111 @@ export class WebServer {
     }
 
     /**
+     * This function checks if complete Apple ID credentials are available.
+     * @returns - Undefined if credentials are available, otherwise a WebServerResponse object indicating the error
+     */
+    handleCredentialsAvailable(): WebServerResponse | undefined {
+        if (!Resources.manager().hasCredentials) {
+            Resources.emit(iCPSEventRuntimeWarning.WEB_SERVER_ERROR, new iCPSError(RESOURCES_ERR.NO_CREDENTIALS));
+            return {
+                code: 412,
+                header: {
+                    "Content-Type": `application/json`
+                },
+                body: {
+                    message: `Apple ID credentials must be provided first`,
+                }
+            }
+        }
+
+        return undefined;
+    }
+
+    /**
+     * This function will handle the request sent to the credential endpoint.
+     * Credentials supplied here are only kept in memory for the lifetime of this process.
+     */
+    handleCredentialsRequest(_url: URL, body: string = ``): WebServerResponse {
+        let check = this.handleInProgress();
+        if (check) {
+            return check;
+        }
+
+        if (Resources.manager().credentialsProvidedAtStartup) {
+            return {
+                code: 409,
+                header: {
+                    "Content-Type": `application/json`
+                },
+                body: {
+                    message: `Apple ID credentials were provided at startup`,
+                }
+            }
+        }
+
+        try {
+            const payload = jsonc.parse(body);
+            if (typeof payload?.username !== `string` || payload.username.trim().length === 0 ||
+                typeof payload?.password !== `string` || payload.password.length === 0) {
+                throw new Error(`Missing username or password`);
+            }
+
+            const accepted = Resources.manager().setCredentials({
+                username: payload.username.trim(),
+                password: payload.password,
+            });
+            if (!accepted) {
+                return {
+                    code: 409,
+                    header: {
+                        "Content-Type": `application/json`
+                    },
+                    body: {
+                        message: `Apple ID credentials were provided at startup`,
+                    }
+                }
+            }
+        } catch (_err) {
+            return {
+                code: 400,
+                header: {
+                    "Content-Type": `application/json`
+                },
+                body: {
+                    message: `Invalid credential payload`,
+                }
+            }
+        }
+
+        Resources.emit(iCPSEventWebServer.REAUTH_REQUESTED);
+        this.triggerReauth()
+            .catch(err => {
+                Resources.emit(iCPSEventWebServer.REAUTH_ERROR, iCPSError.toiCPSError(err));
+            });
+
+        return {
+            code: 200,
+            header: {
+                "Content-Type": `application/json`
+            },
+            body: {
+                message: `Credentials accepted; authentication requested`,
+            }
+        }
+    }
+
+    /**
      * This function will handle the request send to the re-authentication endpoint
      * @emits iCPSEventWebServer.REAUTH_REQUESTED - When the request was received
      * @emits iCPSEventWebServer.REAUTH_ERROR - When there was an error
      */
     handleReauthRequest(): WebServerResponse {
-        const check = this.handleInProgress();
+        let check = this.handleInProgress();
+        if (check) {
+            return check;
+        }
+
+        check = this.handleCredentialsAvailable();
         if (check) {
             return check;
         }
@@ -390,7 +490,11 @@ export class WebServer {
      * @emits iCPSEventWebServer.SYNC_REQUESTED - When the sync was requested
      */
     handleSyncRequest(): WebServerResponse {
-        const check = this.handleInProgress();
+        let check = this.handleInProgress();
+        if (check) {
+            return check;
+        }
+        check = this.handleCredentialsAvailable();
         if (check) {
             return check;
         }

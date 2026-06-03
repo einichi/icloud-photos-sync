@@ -20,6 +20,35 @@ async function triggerReauth() {
     await refreshState()
 }
 
+async function submitCredentials(event) {
+    event.preventDefault();
+
+    const usernameInput = document.getElementById('credential-username');
+    const passwordInput = document.getElementById('credential-password');
+    const submitButton = document.getElementById('credential-submit-button');
+
+    submitButton.disabled = true;
+    const response = await fetch("${basePath}/api/credentials", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            username: usernameInput.value,
+            password: passwordInput.value
+        })
+    });
+    passwordInput.value = "";
+    submitButton.disabled = false;
+
+    if (!response.ok) {
+        alert("Unable to submit credentials: " + response.statusText);
+        return;
+    }
+
+    await refreshState()
+}
+
 async function refreshState() {
     const state = await fetchState()
     resetState()
@@ -83,6 +112,7 @@ function resetState() {
     document.querySelectorAll(".hidden-when-not-ready").forEach((el) => {
         el.style.display = "none";
     });
+    document.getElementById('credential-container').style.display = "none";
 }
 
 /**
@@ -102,6 +132,13 @@ function updateState(state) {
         case 'ready':
             // Increase time between refresh while application is idle
             setTimeout(() => refreshState(), 5000);
+
+            if(!state.hasCredentials) {
+                document.getElementById('credential-container').style.display = "flex";
+                setStateText("Apple ID credentials are required after each service restart.")
+                enableSymbol('unknown')
+                return
+            }
 
             document.querySelectorAll(".hidden-when-not-ready").forEach((el) => {
                 el.style.display = "block";
