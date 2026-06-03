@@ -83,8 +83,10 @@ export class SyncEngine {
                 const backoffMs = this.getRetryBackoffMs(retryCount, err);
                 Resources.emit(iCPSEventSyncEngine.RETRY, retryCount, syncError, backoffMs);
 
+                Resources.logger(this).info(`Settling outstanding network requests before sync retry #${retryCount}`);
                 await Resources.network().settleRateLimiter();
                 await Resources.network().settleCCYLimiter();
+                Resources.logger(this).info(`Outstanding network requests settled before sync retry #${retryCount}`);
                 await this.waitForRetryBackoff(retryCount, backoffMs);
 
                 if (!await this.refreshICloudConnection(failedAttempt, retryError)) {

@@ -240,7 +240,7 @@ export class CLIInterface {
                 this.progressBar.stop();
                 this.print(chalk.magenta(`Detected error during sync: ${err.getDescription()}`));
                 if (backoffMs) {
-                    this.print(chalk.magenta(`Waiting ${Math.ceil(backoffMs / 1000)}s before refreshing iCloud connection & retrying (attempt #${retryCount})...`));
+                    this.print(chalk.magenta(`Settling outstanding requests, then waiting ${Math.ceil(backoffMs / 1000)}s before refreshing iCloud connection & retrying (attempt #${retryCount})...`));
                 } else {
                     this.print(chalk.magenta(`Refreshing iCloud connection & retrying (attempt #${retryCount})...`));
                 }

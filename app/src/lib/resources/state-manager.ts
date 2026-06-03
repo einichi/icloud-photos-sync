@@ -224,7 +224,7 @@ export class StateManager {
             })
             .on(iCPSEventSyncEngine.RETRY, (retryCount: number, err: iCPSError, backoffMs?: number) => {
                 const retryMsg = backoffMs
-                    ? `Waiting ${Math.ceil(backoffMs / 1000)}s before refreshing iCloud connection & retrying`
+                    ? `Settling outstanding requests, then waiting ${Math.ceil(backoffMs / 1000)}s before refreshing iCloud connection & retrying`
                     : `Refreshing iCloud connection & retrying`;
                 this.updateState(StateType.RUNNING, {progressMsg: `Detected error during sync: ${iCPSError.toiCPSError(err).getDescription()}, ${retryMsg} (attempt #${retryCount})...`, progress: 15});
             });

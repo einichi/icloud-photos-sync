@@ -540,52 +540,54 @@ export class iCloudPhotos {
 
     /**
      * The iCloud API is limiting the amount of records that can be obtained with a single request.
-     * This function will build separate requests, based on the expected size of the album.
+     * This function determines how many requests are necessary, based on the expected size of the album.
      * @param zone - Defines the zone to be used
      * @param expectedNumberOfRecords - The amount of records expected within the given album
      * @param albumId - The record name of the album, if undefined all pictures will be returned
-     * @returns An array of Promises, that will resolve to arrays of picture records and the amount of pictures expected from the requests.
+     * @returns The number of necessary requests.
      */
-    buildPictureRecordsRequestsForZone(zone: QueryBuilder.Zones, expectedNumberOfRecords: number, albumId?: string): Promise<any[]>[] {
-        // Calculating number of concurrent requests, in order to execute in parallel
+    getPictureRecordsRequestCountForZone(zone: QueryBuilder.Zones, expectedNumberOfRecords: number, albumId?: string): number {
         const numberOfRequests = albumId === undefined
             ? Math.ceil((expectedNumberOfRecords * 2) / MAX_RECORDS_LIMIT) // On all pictures two records per photo are returned (CPLMaster & CPLAsset) which are counted against max
             : Math.ceil((expectedNumberOfRecords * 3) / MAX_RECORDS_LIMIT); // On folders three records per photo are returned (CPLMaster, CPLAsset & CPLContainerRelation) which are counted against max
 
         Resources.logger(this).debug(`Expecting ${expectedNumberOfRecords} records for album ${albumId === undefined ? `All photos` : albumId} in ${zone} library, executing ${numberOfRequests} queries`);
+        return numberOfRequests;
+    }
 
-        // Collecting all promise queries for parallel execution
-        const pictureRecordsRequests: Promise<any[]>[] = [];
-        for (let index = 0; index < numberOfRequests; index++) {
-            const startRank = albumId === undefined // The start rank always refers to the tuple/triple of records, therefore we need to adjust the start rank based on the amount of records returned
-                ? index * Math.floor(MAX_RECORDS_LIMIT / 2)
-                : index * Math.floor(MAX_RECORDS_LIMIT / 3);
-            Resources.logger(this).debug(`Building query for records of album ${albumId === undefined ? `All photos` : albumId} in ${zone} library at index ${startRank}`);
-            const startRankFilter = QueryBuilder.getStartRankFilterForStartRank(startRank);
-            const directionFilter = QueryBuilder.getDirectionFilterForDirection();
+    /**
+     * Fetches one page of picture records.
+     * @param zone - Defines the zone to be used
+     * @param index - The page index to fetch
+     * @param albumId - The record name of the album, if undefined all pictures will be returned
+     * @returns Picture records for the requested page
+     */
+    async fetchPictureRecordsPageForZone(zone: QueryBuilder.Zones, index: number, albumId?: string): Promise<any[]> {
+        const startRank = albumId === undefined // The start rank always refers to the tuple/triple of records, therefore we need to adjust the start rank based on the amount of records returned
+            ? index * Math.floor(MAX_RECORDS_LIMIT / 2)
+            : index * Math.floor(MAX_RECORDS_LIMIT / 3);
+        Resources.logger(this).debug(`Fetching query for records of album ${albumId === undefined ? `All photos` : albumId} in ${zone} library at index ${startRank}`);
+        const startRankFilter = QueryBuilder.getStartRankFilterForStartRank(startRank);
+        const directionFilter = QueryBuilder.getDirectionFilterForDirection();
 
-            // Different queries for 'all pictures' than album pictures
-            if (albumId === undefined) {
-                pictureRecordsRequests.push(this.performQuery(
-                    zone,
-                    QueryBuilder.RECORD_TYPES.ALL_PHOTOS,
-                    [startRankFilter, directionFilter],
-                    MAX_RECORDS_LIMIT,
-                    QueryBuilder.QUERY_KEYS,
-                ));
-            } else {
-                const parentFilter = QueryBuilder.getParentFilterForParentId(albumId);
-                pictureRecordsRequests.push(this.performQuery(
-                    zone,
-                    QueryBuilder.RECORD_TYPES.PHOTO_RECORDS,
-                    [startRankFilter, directionFilter, parentFilter],
-                    MAX_RECORDS_LIMIT,
-                    QueryBuilder.QUERY_KEYS,
-                ));
-            }
+        if (albumId === undefined) {
+            return this.performQuery(
+                zone,
+                QueryBuilder.RECORD_TYPES.ALL_PHOTOS,
+                [startRankFilter, directionFilter],
+                MAX_RECORDS_LIMIT,
+                QueryBuilder.QUERY_KEYS,
+            );
         }
 
-        return pictureRecordsRequests;
+        const parentFilter = QueryBuilder.getParentFilterForParentId(albumId);
+        return this.performQuery(
+            zone,
+            QueryBuilder.RECORD_TYPES.PHOTO_RECORDS,
+            [startRankFilter, directionFilter, parentFilter],
+            MAX_RECORDS_LIMIT,
+            QueryBuilder.QUERY_KEYS,
+        );
     }
 
     /**
@@ -635,15 +637,12 @@ export class iCloudPhotos {
         // Getting number of items in folder
         const expectedNumberOfRecords = await this.getPictureRecordsCountForZone(zone, parentId);
 
-        // Creating requests, based on number of expected items
-        const pictureRecordsRequests = this.buildPictureRecordsRequestsForZone(zone, expectedNumberOfRecords, parentId);
-
-        // Merging arrays of arrays and waiting for all promises to settle
+        // Fetching pages one after another avoids leaving a large burst of pending iCloud queries behind when one request fails.
+        const numberOfRequests = this.getPictureRecordsRequestCountForZone(zone, expectedNumberOfRecords, parentId);
         const allRecords: any[] = [];
-
-        (await Promise.all(pictureRecordsRequests)).forEach(records => {
-            allRecords.push(...records);
-        });
+        for (let index = 0; index < numberOfRequests; index++) {
+            allRecords.push(...await this.fetchPictureRecordsPageForZone(zone, index, parentId));
+        }
 
         return [allRecords, expectedNumberOfRecords];
     }

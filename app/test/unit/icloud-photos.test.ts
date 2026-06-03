@@ -474,6 +474,43 @@ describe.each([
             test.todo(`Network failure`);
         });
     });
+
+    describe(`Fetch picture records`, () => {
+        test(`Fetches picture record pages sequentially`, async () => {
+            photos.getPictureRecordsCountForZone = jest.fn<typeof photos.getPictureRecordsCountForZone>()
+                .mockResolvedValue(100);
+
+            let resolveFirstPage: (records: string[]) => void;
+            let firstPageCompleted = false;
+            photos.fetchPictureRecordsPageForZone = jest.fn<typeof photos.fetchPictureRecordsPageForZone>()
+                .mockImplementation(async (_zone, index) => {
+                    if (index === 0) {
+                        return new Promise<string[]>(resolve => {
+                            resolveFirstPage = records => {
+                                firstPageCompleted = true;
+                                resolve(records);
+                            };
+                        });
+                    }
+
+                    expect(firstPageCompleted).toBe(true);
+                    return [`recordB`];
+                });
+
+            const fetchPromise = photos.fetchAllPictureRecordsForZone(zone);
+            await Promise.resolve();
+
+            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledTimes(1);
+            resolveFirstPage!([`recordA`]);
+
+            await expect(fetchPromise).resolves.toEqual([[`recordA`, `recordB`], 100]);
+
+            expect(photos.getPictureRecordsCountForZone).toHaveBeenCalledWith(zone, undefined);
+            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledTimes(2);
+            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenNthCalledWith(1, zone, 0, undefined);
+            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenNthCalledWith(2, zone, 1, undefined);
+        });
+    });
 });
 
 // Describe(`Fetch records`, () => {
