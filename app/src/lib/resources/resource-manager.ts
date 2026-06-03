@@ -17,6 +17,16 @@ type AppleCredentials = {
     password: string
 }
 
+function removeUndefinedOptions<T extends object>(options: T): Partial<T> {
+    return Object.entries(options).reduce<Partial<T>>((definedOptions, [key, value]) => {
+        if (value !== undefined) {
+            (definedOptions as Record<string, unknown>)[key] = value;
+        }
+
+        return definedOptions;
+    }, {});
+}
+
 /**
  * This class handles access to the .icloud-photos-sync resource file and handles currently applied configurations from the CLI and environment variables
  */
@@ -33,7 +43,7 @@ export class ResourceManager {
      */
     constructor(appOptions: iCPSAppOptions) {
         // Assign app options & resource files to this data structure
-        Object.assign(this._resources, this._readResourceFile(), appOptions);
+        Object.assign(this._resources, this._readResourceFile(), removeUndefinedOptions(appOptions));
 
         // If trustToken should be refreshed, we clear it now
         if(this._resources.refreshToken) {

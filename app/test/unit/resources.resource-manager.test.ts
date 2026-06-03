@@ -87,6 +87,28 @@ describe(`ResourceManager`, () => {
             });
         });
 
+        test(`should keep the resource file trustToken when appOptions trustToken is undefined`, () => {
+            (ResourceManager.prototype._readResourceFile as jest.Mock)
+                .mockReturnValue({
+                    libraryVersion: 1,
+                    trustToken: Config.trustToken,
+                });
+
+            const resourceManager = new ResourceManager({
+                ...Config.defaultConfig,
+                trustToken: undefined,
+            });
+
+            expect(resourceManager._writeResourceFile).toHaveBeenCalledTimes(1);
+            expect(((resourceManager._writeResourceFile as jest.Mock).mock.contexts[0] as ResourceManager)._resources.trustToken).toEqual(Config.trustToken);
+            expect(((resourceManager._writeResourceFile as jest.Mock).mock.contexts[0] as ResourceManager)._resources.libraryVersion).toEqual(1);
+            expect(resourceManager._resources).toEqual({
+                ...Config.defaultConfig,
+                libraryVersion: 1,
+                trustToken: Config.trustToken,
+            });
+        });
+
         test(`should set the trustToken property from appOption if it is present in the resource file and the appOptions`, () => {
             (ResourceManager.prototype._readResourceFile as jest.Mock)
                 .mockReturnValue({
