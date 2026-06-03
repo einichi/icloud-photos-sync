@@ -133,11 +133,6 @@ abstract class iCloudApp extends iCPSApp {
         } catch (err) {
             Resources.logger(this).warn(`Failed to release library lock: ${err}`);
         }
-        try {
-            await this.icloud.logout();
-        } catch (err) {
-            Resources.logger(this).warn(`Failed to logout from iCloud: ${err}`);
-        }
     }
 
     /**

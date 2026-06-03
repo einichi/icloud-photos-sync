@@ -476,62 +476,53 @@ describe.each([
     });
 
     describe(`Fetch picture records`, () => {
-        test(`Fetches picture record pages sequentially`, async () => {
+        test(`Fetches picture record pages with bounded concurrency`, async () => {
             photos.getPictureRecordsCountForZone = jest.fn<typeof photos.getPictureRecordsCountForZone>()
-                .mockResolvedValue(100);
+                .mockResolvedValue(500);
 
-            let resolveFirstPage: (records: string[]) => void;
-            let firstPageCompleted = false;
+            const resolvePage = new Map<number, () => void>();
             photos.fetchPictureRecordsPageForZone = jest.fn<typeof photos.fetchPictureRecordsPageForZone>()
                 .mockImplementation(async (_zone, index) => {
-                    if (index === 0) {
-                        return new Promise<{records: string[], usedContinuation: boolean}>(resolve => {
-                            resolveFirstPage = records => {
-                                firstPageCompleted = true;
-                                resolve({
-                                    records,
-                                    usedContinuation: false,
-                                });
-                            };
+                    return new Promise<string[]>(resolve => {
+                        resolvePage.set(index, () => {
+                            resolve([`record${index}`]);
                         });
-                    }
-
-                    expect(firstPageCompleted).toBe(true);
-                    return {
-                        records: [`recordB`],
-                        usedContinuation: false,
-                    };
+                    });
                 });
 
             const fetchPromise = photos.fetchAllPictureRecordsForZone(zone);
             await Promise.resolve();
 
-            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledTimes(1);
-            resolveFirstPage!([`recordA`]);
-
-            await expect(fetchPromise).resolves.toEqual([[`recordA`, `recordB`], 100]);
-
-            expect(photos.getPictureRecordsCountForZone).toHaveBeenCalledWith(zone, undefined);
-            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledTimes(2);
+            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledTimes(4);
             expect(photos.fetchPictureRecordsPageForZone).toHaveBeenNthCalledWith(1, zone, 0, undefined);
-            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenNthCalledWith(2, zone, 1, undefined);
+            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenNthCalledWith(4, zone, 3, undefined);
+
+            resolvePage.get(0)!();
+            resolvePage.get(1)!();
+            resolvePage.get(2)!();
+            resolvePage.get(3)!();
+            await Promise.resolve();
+
+            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledTimes(5);
+            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenNthCalledWith(5, zone, 4, undefined);
+
+            resolvePage.get(4)!();
+
+            await expect(fetchPromise).resolves.toEqual([[`record0`, `record1`, `record2`, `record3`, `record4`], 500]);
+            expect(photos.getPictureRecordsCountForZone).toHaveBeenCalledWith(zone, undefined);
         });
 
-        test(`Does not fetch synthetic startRank pages when iCloud returns continuation pages`, async () => {
-            photos.getPictureRecordsCountForZone = jest.fn<typeof photos.getPictureRecordsCountForZone>()
-                .mockResolvedValue(100);
-
-            photos.fetchPictureRecordsPageForZone = jest.fn<typeof photos.fetchPictureRecordsPageForZone>()
+        test(`Ignores continuation marker for startRank-paged picture records`, async () => {
+            const performQueryPage = jest.fn<() => Promise<{records: string[], continuationMarker?: string}>>()
                 .mockResolvedValue({
-                    records: [`recordA`, `recordB`],
-                    usedContinuation: true,
+                    records: [`recordA`],
+                    continuationMarker: `next-page`,
                 });
+            (photos as any).performQueryPage = performQueryPage;
 
-            await expect(photos.fetchAllPictureRecordsForZone(zone)).resolves.toEqual([[`recordA`, `recordB`], 100]);
+            await expect(photos.fetchPictureRecordsPageForZone(zone, 0)).resolves.toEqual([`recordA`]);
 
-            expect(photos.getPictureRecordsCountForZone).toHaveBeenCalledWith(zone, undefined);
-            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledTimes(1);
-            expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledWith(zone, 0, undefined);
+            expect(performQueryPage).toHaveBeenCalledTimes(1);
         });
     });
 });

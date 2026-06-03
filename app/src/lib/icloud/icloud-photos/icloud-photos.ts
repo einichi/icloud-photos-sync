@@ -22,7 +22,8 @@ const RECORD_CHANGE_TAG = `21h2`;
  * The max record limit returned by iCloud.
  * Keeping this below the observed upper limit reduces pressure on the private Photos query indexes.
  */
-const MAX_RECORDS_LIMIT = 100;
+const MAX_RECORDS_LIMIT = 200;
+const PHOTO_METADATA_PAGE_CONCURRENCY = 4;
 const PHOTOS_METADATA_REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
 
 type PhotosQueryPage = {
@@ -629,32 +630,39 @@ export class iCloudPhotos {
      * @param albumId - The record name of the album, if undefined all pictures will be returned
      * @returns Picture records for the requested page
      */
-    async fetchPictureRecordsPageForZone(zone: QueryBuilder.Zones, index: number, albumId?: string): Promise<PhotosQueryResult> {
+    async fetchPictureRecordsPageForZone(zone: QueryBuilder.Zones, index: number, albumId?: string): Promise<any[]> {
         const startRank = albumId === undefined // The start rank always refers to the tuple/triple of records, therefore we need to adjust the start rank based on the amount of records returned
             ? index * Math.floor(MAX_RECORDS_LIMIT / 2)
             : index * Math.floor(MAX_RECORDS_LIMIT / 3);
         Resources.logger(this).debug(`Fetching query for records of album ${albumId === undefined ? `All photos` : albumId} in ${zone} library at index ${startRank}`);
         const startRankFilter = QueryBuilder.getStartRankFilterForStartRank(startRank);
         const directionFilter = QueryBuilder.getDirectionFilterForDirection();
+        let page: PhotosQueryPage;
 
         if (albumId === undefined) {
-            return this.performQueryWithPagination(
+            page = await this.performQueryPage(
                 zone,
                 QueryBuilder.RECORD_TYPES.ALL_PHOTOS,
                 [startRankFilter, directionFilter],
                 MAX_RECORDS_LIMIT,
                 QueryBuilder.QUERY_KEYS,
             );
+        } else {
+            const parentFilter = QueryBuilder.getParentFilterForParentId(albumId);
+            page = await this.performQueryPage(
+                zone,
+                QueryBuilder.RECORD_TYPES.PHOTO_RECORDS,
+                [startRankFilter, directionFilter, parentFilter],
+                MAX_RECORDS_LIMIT,
+                QueryBuilder.QUERY_KEYS,
+            );
         }
 
-        const parentFilter = QueryBuilder.getParentFilterForParentId(albumId);
-        return this.performQueryWithPagination(
-            zone,
-            QueryBuilder.RECORD_TYPES.PHOTO_RECORDS,
-            [startRankFilter, directionFilter, parentFilter],
-            MAX_RECORDS_LIMIT,
-            QueryBuilder.QUERY_KEYS,
-        );
+        if (page.continuationMarker) {
+            Resources.logger(this).debug(`Ignoring continuation marker for startRank-paged photo metadata query at index ${startRank}`);
+        }
+
+        return page.records;
     }
 
     /**
@@ -705,19 +713,19 @@ export class iCloudPhotos {
         // Getting number of items in folder
         const expectedNumberOfRecords = await this.getPictureRecordsCountForZone(zone, parentId);
 
-        // Fetching pages one after another avoids leaving a large burst of pending iCloud queries behind when one request fails.
         const numberOfRequests = this.getPictureRecordsRequestCountForZone(zone, expectedNumberOfRecords, parentId);
         const allRecords: any[] = [];
-        for (let index = 0; index < numberOfRequests; index++) {
-            Resources.logger(this).info(`Fetching iCloud photo metadata page ${index + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library`);
-            const page = await this.fetchPictureRecordsPageForZone(zone, index, parentId);
-            allRecords.push(...page.records);
-            Resources.logger(this).info(`Fetched iCloud photo metadata page ${index + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library (${allRecords.length} raw records accumulated)`);
+        const concurrency = Math.min(PHOTO_METADATA_PAGE_CONCURRENCY, Math.max(numberOfRequests, 1));
 
-            if (page.usedContinuation) {
-                Resources.logger(this).info(`iCloud used continuation marker pagination for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library; skipping remaining synthetic startRank pages`);
-                break;
-            }
+        for (let startIndex = 0; startIndex < numberOfRequests; startIndex += concurrency) {
+            const pageIndexes = Array.from(
+                {length: Math.min(concurrency, numberOfRequests - startIndex)},
+                (_unused, offset) => startIndex + offset,
+            );
+            Resources.logger(this).info(`Fetching iCloud photo metadata pages ${pageIndexes[0] + 1}-${pageIndexes[pageIndexes.length - 1] + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library`);
+            const pages = await Promise.all(pageIndexes.map(index => this.fetchPictureRecordsPageForZone(zone, index, parentId)));
+            pages.forEach(page => allRecords.push(...page));
+            Resources.logger(this).info(`Fetched iCloud photo metadata pages ${pageIndexes[0] + 1}-${pageIndexes[pageIndexes.length - 1] + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library (${allRecords.length} raw records accumulated)`);
         }
 
         Resources.logger(this).info(`Fetched ${allRecords.length} raw iCloud photo metadata records for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library in ${Date.now() - startedAt}ms`);

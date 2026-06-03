@@ -149,7 +149,7 @@ describe(`App control flow`, () => {
 
         await expect(tokenApp.run()).rejects.toThrow(/^Unable to acquire trust token$/);
 
-        expect(tokenApp.icloud.logout).toHaveBeenCalledTimes(1);
+        expect(tokenApp.icloud.logout).not.toHaveBeenCalled();
         expect(tokenApp.icloud.authenticate).toHaveBeenCalledTimes(1);
 
         expect(Resources._instances.network.resetSession).toHaveBeenCalledTimes(1);
@@ -176,7 +176,7 @@ describe(`App control flow`, () => {
 
         await expect(tokenApp.run()).resolves.toBeFalsy();
 
-        expect(tokenApp.icloud.logout).toHaveBeenCalledTimes(1);
+        expect(tokenApp.icloud.logout).not.toHaveBeenCalled();
         expect(tokenApp.icloud.authenticate).toHaveBeenCalledTimes(1);
 
         expect(Resources._instances.network.resetSession).toHaveBeenCalledTimes(1);
@@ -210,7 +210,7 @@ describe(`App control flow`, () => {
 
         expect(tokenApp.acquireLibraryLock).toHaveBeenCalledTimes(1);
         expect(tokenApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
-        expect(tokenApp.icloud.logout).toHaveBeenCalledTimes(1);
+        expect(tokenApp.icloud.logout).not.toHaveBeenCalled();
     });
 
     test(`Handle lock release error`, async () => {
@@ -231,7 +231,7 @@ describe(`App control flow`, () => {
         await expect(tokenApp.run()).resolves.toBeTruthy();
 
         expect(tokenApp.icloud.authenticate).toHaveBeenCalledTimes(1);
-        expect(tokenApp.icloud.logout).toHaveBeenCalledTimes(1);
+        expect(tokenApp.icloud.logout).not.toHaveBeenCalled();
 
         expect(Resources._instances.network.resetSession).toHaveBeenCalledTimes(1);
         expect(Resources._instances.event.removeListenersFromRegistry).toHaveBeenCalledTimes(4);
@@ -240,7 +240,7 @@ describe(`App control flow`, () => {
         expect(tokenApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
     });
 
-    test(`Handle logout error`, async () => {
+    test(`Does not logout during cleanup`, async () => {
         const tokenApp = await appFactory(validOptions.token) as TokenApp;
         tokenApp.acquireLibraryLock = jest.fn<typeof tokenApp.acquireLibraryLock>()
             .mockResolvedValue();
@@ -258,7 +258,7 @@ describe(`App control flow`, () => {
         await expect(tokenApp.run()).resolves.toBeTruthy();
 
         expect(tokenApp.icloud.authenticate).toHaveBeenCalledTimes(1);
-        expect(tokenApp.icloud.logout).toHaveBeenCalledTimes(1);
+        expect(tokenApp.icloud.logout).not.toHaveBeenCalled();
 
         expect(Resources._instances.network.resetSession).toHaveBeenCalledTimes(1);
         expect(Resources._instances.event.removeListenersFromRegistry).toHaveBeenCalledTimes(4);
@@ -297,7 +297,7 @@ describe(`App control flow`, () => {
 
             expect(tokenApp.acquireLibraryLock).toHaveBeenCalledTimes(1);
             expect(tokenApp.icloud.authenticate).toHaveBeenCalledTimes(1);
-            expect(tokenApp.icloud.logout).toHaveBeenCalledTimes(1);
+            expect(tokenApp.icloud.logout).not.toHaveBeenCalled();
             expect(tokenApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
 
             expect(Resources._instances.network.resetSession).toHaveBeenCalledTimes(1);
@@ -330,7 +330,7 @@ describe(`App control flow`, () => {
 
             expect(syncApp.acquireLibraryLock).toHaveBeenCalledTimes(1);
             expect(syncApp.icloud.authenticate).toHaveBeenCalledTimes(1);
-            expect(syncApp.icloud.logout).toHaveBeenCalledTimes(1);
+            expect(syncApp.icloud.logout).not.toHaveBeenCalled();
             expect(syncApp.syncEngine.sync).toHaveBeenCalledTimes(1);
             expect(syncApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
             expect(Resources._instances.network.resetSession).toHaveBeenCalledTimes(1);
@@ -359,7 +359,7 @@ describe(`App control flow`, () => {
 
             expect(syncApp.acquireLibraryLock).toHaveBeenCalledTimes(1);
             expect(syncApp.icloud.authenticate).toHaveBeenCalledTimes(1);
-            expect(syncApp.icloud.logout).toHaveBeenCalledTimes(1);
+            expect(syncApp.icloud.logout).not.toHaveBeenCalled();
             expect(syncApp.syncEngine.sync).not.toHaveBeenCalled();
             expect(syncApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
             expect(Resources._instances.network.resetSession).toHaveBeenCalledTimes(1);
@@ -388,7 +388,7 @@ describe(`App control flow`, () => {
 
             expect(syncApp.acquireLibraryLock).toHaveBeenCalledTimes(1);
             expect(syncApp.icloud.authenticate).toHaveBeenCalledTimes(1);
-            expect(syncApp.icloud.logout).toHaveBeenCalledTimes(1);
+            expect(syncApp.icloud.logout).not.toHaveBeenCalled();
             expect(syncApp.syncEngine.sync).toHaveBeenCalledTimes(1);
             expect(syncApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
             expect(Resources._instances.network.resetSession).toHaveBeenCalledTimes(1);
@@ -423,7 +423,7 @@ describe(`App control flow`, () => {
 
             expect(archiveApp.acquireLibraryLock).toHaveBeenCalledTimes(1);
             expect(archiveApp.icloud.authenticate).toHaveBeenCalledTimes(1);
-            expect(archiveApp.icloud.logout).toHaveBeenCalledTimes(1);
+            expect(archiveApp.icloud.logout).not.toHaveBeenCalled();
             expect(archiveApp.syncEngine.sync).toHaveBeenCalledTimes(1);
             expect(archiveApp.archiveEngine.archivePath).toHaveBeenCalledWith(validOptions.archive[validOptions.archive.length - 1], remoteState);
             expect(archiveApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
@@ -457,7 +457,7 @@ describe(`App control flow`, () => {
 
             expect(archiveApp.acquireLibraryLock).toHaveBeenCalledTimes(1);
             expect(archiveApp.icloud.authenticate).toHaveBeenCalledTimes(1);
-            expect(archiveApp.icloud.logout).toHaveBeenCalledTimes(1);
+            expect(archiveApp.icloud.logout).not.toHaveBeenCalled();
             expect(archiveApp.syncEngine.sync).not.toHaveBeenCalled();
             expect(archiveApp.archiveEngine.archivePath).toHaveBeenCalledWith(validOptions.archive[validOptions.archive.length - 1], []);
             expect(archiveApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
@@ -490,7 +490,7 @@ describe(`App control flow`, () => {
 
             expect(archiveApp.acquireLibraryLock).toHaveBeenCalledTimes(1);
             expect(archiveApp.icloud.authenticate).toHaveBeenCalledTimes(1);
-            expect(archiveApp.icloud.logout).toHaveBeenCalledTimes(1);
+            expect(archiveApp.icloud.logout).not.toHaveBeenCalled();
             expect(archiveApp.syncEngine.sync).toHaveBeenCalledTimes(1);
             expect(archiveApp.archiveEngine.archivePath).toHaveBeenCalledTimes(1);
             expect(archiveApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
