@@ -287,6 +287,7 @@ describe(`Coordination`, () => {
 
     test(`Fetch & Load State`, async () => {
         const fetchNLoadEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.FETCH_N_LOAD);
+        const fetchNLoadProgressEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS);
 
         const convertCPLAlbumsOriginal = SyncEngineHelper.convertCPLAlbums;
         const convertCPLAssetsOriginal = SyncEngineHelper.convertCPLAssets;
@@ -312,6 +313,12 @@ describe(`Coordination`, () => {
         const result = await syncEngine.fetchAndLoadState();
 
         expect(fetchNLoadEvent).toHaveBeenCalledTimes(1);
+        expect(fetchNLoadProgressEvent).toHaveBeenCalledWith(`Loading local assets and albums from disk; fetching remote asset metadata...`, 16);
+        expect(fetchNLoadProgressEvent).toHaveBeenCalledWith(`Fetched remote asset metadata (1 assets, 1 masters); converting...`, 20);
+        expect(fetchNLoadProgressEvent).toHaveBeenCalledWith(`Converted 1 remote assets; fetching remote album metadata...`, 21);
+        expect(fetchNLoadProgressEvent).toHaveBeenCalledWith(`Fetched remote album metadata (1 records); converting...`, 22);
+        expect(fetchNLoadProgressEvent).toHaveBeenCalledWith(`Waiting for local library state from disk...`, 22);
+        expect(fetchNLoadProgressEvent).toHaveBeenCalledWith(`Loaded local library state (1 assets, 1 albums)`, 23);
         expect(syncEngine.icloud.photos.fetchAllCPLAssetsMasters).toHaveBeenCalledTimes(1);
         expect(SyncEngineHelper.convertCPLAssets).toHaveBeenCalledTimes(1);
         expect(SyncEngineHelper.convertCPLAssets).toHaveBeenCalledWith(...fetchAllCPLAssetsMastersReturnValue);

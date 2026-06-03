@@ -181,7 +181,17 @@ export class StateManager {
                 this.updateState(StateType.RUNNING, {progressMsg: `Starting sync...`, progress: 15});
             })
             .on(iCPSEventSyncEngine.FETCH_N_LOAD, () => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Loading local & fetching remote iCloud Library state...`, progress: 16});
+                this.updateState(StateType.RUNNING, {
+                    progressMsg: `Loading local & fetching remote iCloud Library state...`,
+                    progressDetail: `Starting local library load and remote metadata fetch...`,
+                    progress: 16
+                });
+            })
+            .on(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS, (detail: string, progress?: number) => {
+                this.updateFetchAndLoadDetail(detail, progress);
+            })
+            .on(iCPSEventPhotos.FETCH_PROGRESS, (detail: string) => {
+                this.updateFetchAndLoadDetail(detail);
             })
             .on(iCPSEventSyncEngine.FETCH_N_LOAD_COMPLETED, (remoteAssetCount: number, remoteAlbumCount: number, localAssetCount: number, localAlbumCount: number) => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Loaded local (${localAssetCount} assets in ${localAlbumCount} albums) & remote state (${remoteAssetCount} assets in ${remoteAlbumCount} albums)`, progress: 23});
@@ -340,6 +350,23 @@ export class StateManager {
      */
     private getAssetProgressMessage(): string {
         return `Syncing assets: ${this.inProgressAssets.completedAssets}/${this.inProgressAssets.totalAssets}`;
+    }
+
+    /**
+     * Updates the fetch/load detail line while the sync engine is loading local and remote state.
+     * @param detail - Human-readable detail to display below the main status
+     * @param progress - Optional overall progress percentage
+     */
+    private updateFetchAndLoadDetail(detail: string, progress?: number) {
+        if (this.state !== StateType.RUNNING || this.inProgressContext.message !== `Loading local & fetching remote iCloud Library state...`) {
+            return;
+        }
+
+        this.updateState(StateType.RUNNING, {
+            progressMsg: this.inProgressContext.message,
+            progressDetail: detail,
+            progress: progress ?? this.inProgressContext.progress
+        });
     }
 
     /**

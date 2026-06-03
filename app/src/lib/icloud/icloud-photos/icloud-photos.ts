@@ -710,12 +710,15 @@ export class iCloudPhotos {
      */
     async fetchAllPictureRecordsForZone(zone: QueryBuilder.Zones, parentId?: string): Promise<[any[], number]> {
         const startedAt = Date.now();
+        const albumName = parentId === undefined ? `All photos` : parentId;
+        Resources.emit(iCPSEventPhotos.FETCH_PROGRESS, `Counting remote asset metadata (${zone} library, ${albumName})...`);
         // Getting number of items in folder
         const expectedNumberOfRecords = await this.getPictureRecordsCountForZone(zone, parentId);
 
         const numberOfRequests = this.getPictureRecordsRequestCountForZone(zone, expectedNumberOfRecords, parentId);
         const allRecords: any[] = [];
         const concurrency = Math.min(PHOTO_METADATA_PAGE_CONCURRENCY, Math.max(numberOfRequests, 1));
+        Resources.emit(iCPSEventPhotos.FETCH_PROGRESS, `Fetching remote asset metadata (${zone} library, ${albumName}): 0/${numberOfRequests} page batches`);
 
         for (let startIndex = 0; startIndex < numberOfRequests; startIndex += concurrency) {
             const pageIndexes = Array.from(
@@ -725,6 +728,7 @@ export class iCloudPhotos {
             Resources.logger(this).info(`Fetching iCloud photo metadata pages ${pageIndexes[0] + 1}-${pageIndexes[pageIndexes.length - 1] + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library`);
             const pages = await Promise.all(pageIndexes.map(index => this.fetchPictureRecordsPageForZone(zone, index, parentId)));
             pages.forEach(page => allRecords.push(...page));
+            Resources.emit(iCPSEventPhotos.FETCH_PROGRESS, `Fetching remote asset metadata (${zone} library, ${albumName}): pages ${pageIndexes[0] + 1}-${pageIndexes[pageIndexes.length - 1] + 1}/${numberOfRequests}, ${allRecords.length} raw records`);
             Resources.logger(this).info(`Fetched iCloud photo metadata pages ${pageIndexes[0] + 1}-${pageIndexes[pageIndexes.length - 1] + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library (${allRecords.length} raw records accumulated)`);
         }
 

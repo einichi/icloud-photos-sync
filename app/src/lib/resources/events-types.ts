@@ -130,6 +130,10 @@ export enum iCPSEventPhotos {
      * Emitted when the photos library is ready to use
      */
     READY = `photos-ready`,
+    /**
+     * Emitted when the icloud photos library reports fetch progress - provides a human-readable progress detail string
+     */
+    FETCH_PROGRESS = `photos-fetch-progress`,
      /**
      * Emitted when the icloud photos library has experienced an error - provides an iCPSError as argument
      */
@@ -222,6 +226,10 @@ export enum iCPSEventSyncEngine {
      * Emitted when the fetch and load process has started
      */
     FETCH_N_LOAD = `sync-fetch_n_load`,
+    /**
+     * Emitted when the fetch and load process reports additional progress - provides a human-readable progress detail string
+     */
+    FETCH_N_LOAD_PROGRESS = `sync-fetch_n_load_progress`,
     /**
      * Emitted when the fetch and load process has completed - provides the number of remote assets and albums as well as the number of local assets and albums as arguments
      */

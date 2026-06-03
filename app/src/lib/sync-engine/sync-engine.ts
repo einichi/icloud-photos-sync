@@ -306,23 +306,29 @@ export class SyncEngine {
             this.photosLibrary.loadAssets(),
             this.photosLibrary.loadAlbums(),
         ]);
+        Resources.emit(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS, `Loading local assets and albums from disk; fetching remote asset metadata...`, 16);
 
         const remoteAssetStartedAt = Date.now();
         Resources.logger(this).info(`Fetching remote iCloud asset metadata`);
         const [cplAssets, cplMasters] = await this.icloud.photos.fetchAllCPLAssetsMasters();
+        Resources.emit(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS, `Fetched remote asset metadata (${cplAssets.length} assets, ${cplMasters.length} masters); converting...`, 20);
         Resources.logger(this).info(`Fetched remote iCloud asset metadata in ${Date.now() - remoteAssetStartedAt}ms; converting ${cplAssets.length} assets and ${cplMasters.length} masters`);
         const remoteAssets = SyncEngineHelper.convertCPLAssets(cplAssets, cplMasters);
+        Resources.emit(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS, `Converted ${remoteAssets.length} remote assets; fetching remote album metadata...`, 21);
         Resources.logger(this).info(`Converted ${remoteAssets.length} remote iCloud assets`);
 
         const remoteAlbumStartedAt = Date.now();
         Resources.logger(this).info(`Fetching remote iCloud album metadata`);
         const cplAlbums = await this.icloud.photos.fetchAllCPLAlbums();
+        Resources.emit(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS, `Fetched remote album metadata (${cplAlbums.length} records); converting...`, 22);
         Resources.logger(this).info(`Fetched remote iCloud album metadata in ${Date.now() - remoteAlbumStartedAt}ms; converting ${cplAlbums.length} albums`);
         const remoteAlbums = SyncEngineHelper.convertCPLAlbums(cplAlbums);
         Resources.logger(this).info(`Converted ${remoteAlbums.length} remote iCloud albums`);
 
         Resources.logger(this).info(`Waiting for local Photos library state load`);
+        Resources.emit(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS, `Waiting for local library state from disk...`, 22);
         const [localAssets, localAlbums] = await localState;
+        Resources.emit(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS, `Loaded local library state (${Object.keys(localAssets).length} assets, ${Object.keys(localAlbums).length} albums)`, 23);
         Resources.logger(this).info(`Loaded local Photos library state with ${Object.keys(localAssets).length} assets and ${Object.keys(localAlbums).length} albums`);
 
         Resources.emit(iCPSEventSyncEngine.FETCH_N_LOAD_COMPLETED, remoteAssets.length, remoteAlbums.length, Object.keys(localAssets).length, Object.keys(localAlbums).length);

@@ -544,6 +544,32 @@ describe(`State changes`, () => {
             trustedPhoneNumbers: serializedState.trustedPhoneNumbers
         }))
     })
+
+    test(`Should show fetch and load progress detail`, () => {
+        mockedEventManager.emit(iCPSEventApp.SCHEDULED_START)
+        mockedEventManager.emit(iCPSEventSyncEngine.FETCH_N_LOAD)
+        mockedEventManager.emit(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS, `Fetching remote asset metadata: pages 1-4/20`, 18)
+
+        expect(mockedState.serialize()).toEqual(expect.objectContaining({
+            state: `running`,
+            progress: 18,
+            progressMsg: `Loading local & fetching remote iCloud Library state...`,
+            progressDetail: `Fetching remote asset metadata: pages 1-4/20`
+        }))
+    })
+
+    test(`Should show iCloud Photos fetch progress detail while fetching and loading`, () => {
+        mockedEventManager.emit(iCPSEventApp.SCHEDULED_START)
+        mockedEventManager.emit(iCPSEventSyncEngine.FETCH_N_LOAD)
+        mockedEventManager.emit(iCPSEventPhotos.FETCH_PROGRESS, `Fetching remote asset metadata (Primary library, All photos): pages 1-4/20, 800 raw records`)
+
+        expect(mockedState.serialize()).toEqual(expect.objectContaining({
+            state: `running`,
+            progress: 16,
+            progressMsg: `Loading local & fetching remote iCloud Library state...`,
+            progressDetail: `Fetching remote asset metadata (Primary library, All photos): pages 1-4/20, 800 raw records`
+        }))
+    })
 })
 
 describe(`Log added`, () => { 
