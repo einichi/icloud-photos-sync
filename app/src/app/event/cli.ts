@@ -236,10 +236,14 @@ export class CLIInterface {
                 this.print(chalk.green.bold(`Successfully completed sync at ${this.getDateTime()}`));
                 this.print(chalk.white(this.getHorizontalLine()));
             })
-            .on(iCPSEventSyncEngine.RETRY, (retryCount: number, err: iCPSError) => {
+            .on(iCPSEventSyncEngine.RETRY, (retryCount: number, err: iCPSError, backoffMs?: number) => {
                 this.progressBar.stop();
                 this.print(chalk.magenta(`Detected error during sync: ${err.getDescription()}`));
-                this.print(chalk.magenta(`Refreshing iCloud connection & retrying (attempt #${retryCount})...`));
+                if (backoffMs) {
+                    this.print(chalk.magenta(`Waiting ${Math.ceil(backoffMs / 1000)}s before refreshing iCloud connection & retrying (attempt #${retryCount})...`));
+                } else {
+                    this.print(chalk.magenta(`Refreshing iCloud connection & retrying (attempt #${retryCount})...`));
+                }
                 this.print(chalk.white(this.getHorizontalLine()));
             });
 

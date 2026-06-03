@@ -267,7 +267,7 @@ export enum iCPSEventSyncEngine {
      */
     DONE = `sync-done`,
     /**
-     * Emitted when the sync process has experienced an error and will retry - provides the number of retries as argument as well as the iCPSError leading to the retry
+     * Emitted when the sync process has experienced an error and will retry - provides the next retry count, the iCPSError leading to the retry and optionally the backoff delay in milliseconds
      */
     RETRY = `sync-retry`,
 }

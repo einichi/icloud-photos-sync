@@ -10,6 +10,11 @@ import {SyncEngineHelper} from './helper.js';
 import {iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-types.js';
 import {AxiosError} from 'axios';
 
+const RETRY_BACKOFF_BASE_MS = 30 * 1000;
+const RETRY_BACKOFF_MAX_MS = 5 * 60 * 1000;
+const RETRY_BACKOFF_JITTER_MS = 5 * 1000;
+const RETRYABLE_HTTP_STATUS_CODES = new Set([408, 409, 421, 425, 429, 500, 502, 503, 504]);
+
 /**
  * This class handles the photos sync
  */
@@ -61,31 +66,186 @@ export class SyncEngine {
                 Resources.emit(iCPSEventSyncEngine.DONE);
                 return [remoteAssets, remoteAlbums];
             } catch (err) {
-                retryError.addContext(`error-try-${retryCount}`, err);
+                const failedAttempt = retryCount;
+                const syncError = this.buildSyncError(err);
+                retryError.addContext(`error-try-${failedAttempt}`, this.getRetryErrorContext(err));
                 retryCount++;
 
-                Resources.emit(iCPSEventSyncEngine.RETRY, retryCount, (err as AxiosError).isAxiosError
-                    ? new iCPSError(SYNC_ERR.NETWORK).addCause(err)
-                    : new iCPSError(SYNC_ERR.UNKNOWN).addCause(err));
+                if (!this.isRetryableSyncError(err)) {
+                    Resources.logger(this).warn(`Not retrying non-retryable sync error: ${syncError.getDescription()}`);
+                    throw syncError;
+                }
 
+                if (Resources.manager().maxRetries < retryCount) {
+                    break;
+                }
+
+                const backoffMs = this.getRetryBackoffMs(retryCount);
+                Resources.emit(iCPSEventSyncEngine.RETRY, retryCount, syncError, backoffMs);
+
+                await Resources.network().settleRateLimiter();
                 await Resources.network().settleCCYLimiter();
+                await this.waitForRetryBackoff(retryCount, backoffMs);
 
-                Resources.logger(this).debug(`Refreshing iCloud connection...`);
-                try {
-                    const iCloudReady = this.icloud.getReady();
-                    await this.icloud.setupAccount();
-                    if (!await iCloudReady) {
-                        return [[], []];
-                    }
-                } catch (refreshErr) {
-                    retryError.addContext(`error-try-${retryCount - 1}-refresh`, refreshErr);
-                    Resources.logger(this).warn(`Unable to refresh iCloud connection before retry: ${iCPSError.toiCPSError(refreshErr).getDescription()}`);
+                if (!await this.refreshICloudConnection(failedAttempt, retryError)) {
+                    return [[], []];
                 }
             }
         }
 
         // We'll only reach this, if we exceeded retryCount
         throw retryError.addMessage(`${retryCount}`);
+    }
+
+    /**
+     * Refreshes the iCloud account/session and Photos service state before a retry.
+     * @param failedAttempt - The sync attempt that triggered this recovery
+     * @param retryError - The aggregate retry error to annotate if recovery fails
+     * @returns False if MFA timed out while recovering, true otherwise
+     */
+    private async refreshICloudConnection(failedAttempt: number, retryError: iCPSError): Promise<boolean> {
+        Resources.logger(this).debug(`Refreshing iCloud connection...`);
+        try {
+            const iCloudReady = this.icloud.getReady();
+            await this.icloud.setupAccount();
+            if (!await iCloudReady) {
+                return false;
+            }
+
+            await this.icloud.photos.setup();
+        } catch (refreshErr) {
+            retryError.addContext(`error-try-${failedAttempt}-refresh`, this.getRetryErrorContext(refreshErr));
+            Resources.logger(this).warn(`Unable to refresh iCloud connection before retry: ${iCPSError.toiCPSError(refreshErr).getDescription()}`);
+        }
+
+        return true;
+    }
+
+    /**
+     * Waits before the next retry attempt using a bounded exponential backoff.
+     * @param retryCount - The retry attempt number that will run after the delay
+     * @param backoffMs - The number of milliseconds to wait
+     */
+    private async waitForRetryBackoff(retryCount: number, backoffMs: number): Promise<void> {
+        Resources.logger(this).info(`Waiting ${Math.ceil(backoffMs / 1000)}s before sync retry #${retryCount}`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+    }
+
+    /**
+     * Computes a bounded exponential backoff delay with small jitter.
+     * @param retryCount - The retry attempt number that will run after the delay
+     * @returns Delay in milliseconds
+     */
+    private getRetryBackoffMs(retryCount: number): number {
+        const exponentialDelay = RETRY_BACKOFF_BASE_MS * (2 ** Math.max(retryCount - 2, 0));
+        const cappedDelay = Math.min(exponentialDelay, RETRY_BACKOFF_MAX_MS);
+        return cappedDelay + Math.floor(Math.random() * RETRY_BACKOFF_JITTER_MS);
+    }
+
+    /**
+     * Builds a sync-level error while preserving the original cause chain.
+     * @param err - The original error
+     * @returns The sync-level error
+     */
+    private buildSyncError(err: unknown): iCPSError {
+        const cause = err instanceof Error ? err : iCPSError.toiCPSError(err);
+        return new iCPSError(this.getAxiosError(err) ? SYNC_ERR.NETWORK : SYNC_ERR.UNKNOWN)
+            .addCause(cause);
+    }
+
+    /**
+     * Determines whether a failed sync request should be retried.
+     * @param err - The original error
+     * @returns True if retrying is expected to help
+     */
+    private isRetryableSyncError(err: unknown): boolean {
+        const axiosError = this.getAxiosError(err);
+        if (!axiosError?.response?.status) {
+            return true;
+        }
+
+        return RETRYABLE_HTTP_STATUS_CODES.has(axiosError.response.status);
+    }
+
+    /**
+     * Extracts the root Axios error from an app error cause chain.
+     * @param err - The original error
+     * @returns The nested Axios error, if present
+     */
+    private getAxiosError(err: unknown): AxiosError | undefined {
+        const seen = new Set<unknown>();
+        let current = err;
+
+        while (current instanceof Error && !seen.has(current)) {
+            seen.add(current);
+            if ((current as AxiosError).isAxiosError || current.name === `AxiosError`) {
+                return current as AxiosError;
+            }
+
+            current = (current as Error & {cause?: unknown}).cause;
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Creates safe retry context without request bodies, credentials or headers.
+     * @param err - The original error
+     * @returns A sanitized error context object
+     */
+    private getRetryErrorContext(err: unknown): Record<string, unknown> {
+        const syncError = this.buildSyncError(err);
+        const context: Record<string, unknown> = {
+            description: syncError.getDescription(),
+            errorCodeStack: syncError.getErrorCodeStack(),
+        };
+
+        const axiosError = this.getAxiosError(err);
+        if (axiosError) {
+            context.request = this.getAxiosRequestContext(axiosError);
+        }
+
+        return context;
+    }
+
+    /**
+     * Returns safe request metadata for retry diagnostics.
+     * @param axiosError - The Axios error to inspect
+     * @returns Request metadata without headers or body
+     */
+    private getAxiosRequestContext(axiosError: AxiosError): Record<string, unknown> {
+        const requestContext: Record<string, unknown> = {};
+
+        if (axiosError.code) {
+            requestContext.code = axiosError.code;
+        }
+
+        if (axiosError.config?.method) {
+            requestContext.method = axiosError.config.method.toUpperCase();
+        }
+
+        if (axiosError.config?.url) {
+            requestContext.endpoint = this.getSafeEndpoint(axiosError.config.url);
+        }
+
+        if (axiosError.response?.status) {
+            requestContext.status = axiosError.response.status;
+        }
+
+        return requestContext;
+    }
+
+    /**
+     * Strips query parameters and host information from URLs for safe diagnostics.
+     * @param url - The URL to sanitize
+     * @returns A safe endpoint path
+     */
+    private getSafeEndpoint(url: string): string {
+        try {
+            return new URL(url).pathname;
+        } catch (_err) {
+            return url.split(`?`)[0];
+        }
     }
 
     /**

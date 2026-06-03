@@ -222,8 +222,11 @@ export class StateManager {
             .on(iCPSEventSyncEngine.WRITE_COMPLETED, () => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Successfully wrote diff to disk!`, progress: 99});
             })
-            .on(iCPSEventSyncEngine.RETRY, (retryCount: number, err: iCPSError) => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Detected error during sync: ${iCPSError.toiCPSError(err).getDescription()}, Refreshing iCloud connection & retrying (attempt #${retryCount})...`, progress: 15});
+            .on(iCPSEventSyncEngine.RETRY, (retryCount: number, err: iCPSError, backoffMs?: number) => {
+                const retryMsg = backoffMs
+                    ? `Waiting ${Math.ceil(backoffMs / 1000)}s before refreshing iCloud connection & retrying`
+                    : `Refreshing iCloud connection & retrying`;
+                this.updateState(StateType.RUNNING, {progressMsg: `Detected error during sync: ${iCPSError.toiCPSError(err).getDescription()}, ${retryMsg} (attempt #${retryCount})...`, progress: 15});
             });
 
 

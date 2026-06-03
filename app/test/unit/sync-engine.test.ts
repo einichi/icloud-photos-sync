@@ -13,7 +13,7 @@ import {SyncEngine} from '../../src/lib/sync-engine/sync-engine';
 import {iCloud} from '../../src/lib/icloud/icloud';
 import {PhotosLibrary} from '../../src/lib/photos-library/photos-library';
 import {iCPSError} from '../../src/app/error/error';
-import {SYNC_ERR} from '../../src/app/error/error-codes';
+import {ICLOUD_PHOTOS_ERR, SYNC_ERR} from '../../src/app/error/error-codes';
 
 let mockedResourceManager: MockedResourceManager;
 let mockedEventManager: MockedEventManager;
@@ -37,10 +37,17 @@ afterEach(() => {
 
 describe(`Coordination`, () => {
     beforeEach(() => {
+        mockedNetworkManager.settleRateLimiter = jest.fn<typeof mockedNetworkManager.settleRateLimiter>();
         mockedNetworkManager.settleCCYLimiter = jest.fn<typeof mockedNetworkManager.settleCCYLimiter>();
         syncEngine.icloud.setupAccount = jest.fn<typeof syncEngine.icloud.setupAccount>();
         syncEngine.icloud.getReady = jest.fn<typeof syncEngine.icloud.getReady>()
             .mockResolvedValue(true);
+        syncEngine.icloud.photos.setup = jest.fn<typeof syncEngine.icloud.photos.setup>()
+            .mockResolvedValue();
+        (syncEngine as any).getRetryBackoffMs = jest.fn()
+            .mockReturnValue(30000);
+        (syncEngine as any).waitForRetryBackoff = jest.fn()
+            .mockResolvedValue(undefined);
     });
 
     describe(`Sync`, () => {
@@ -62,9 +69,11 @@ describe(`Coordination`, () => {
             expect(syncEngine.diffState).toHaveBeenCalledWith(...fetchAndLoadStateReturnValue);
             expect(syncEngine.writeState).toHaveBeenCalledWith(...diffStateReturnValue);
             expect(doneEvent).toHaveBeenCalledTimes(1);
+            expect(mockedNetworkManager.settleRateLimiter).not.toHaveBeenCalled();
             expect(mockedNetworkManager.settleCCYLimiter).not.toHaveBeenCalled();
             expect(retryEvent).not.toHaveBeenCalled();
             expect(syncEngine.icloud.setupAccount).not.toHaveBeenCalled();
+            expect(syncEngine.icloud.photos.setup).not.toHaveBeenCalled();
         });
 
         test(`Reach maximum retries`, async () => {
@@ -93,7 +102,7 @@ describe(`Coordination`, () => {
             await expect(syncEngine.sync()).rejects.toEqual(new Error(`Sync did not complete successfully within expected amount of tries`));
 
             expect(startEvent).toHaveBeenCalled();
-            expect(retryEvent).toHaveBeenCalledTimes(4);
+            expect(retryEvent).toHaveBeenCalledTimes(3);
             expect(syncEngine.fetchAndLoadState).toHaveBeenCalledTimes(4);
             expect(syncEngine.diffState).toHaveBeenCalledTimes(4);
             expect(syncEngine.diffState).toHaveBeenNthCalledWith(1, ...fetchAndLoadStateReturnValue);
@@ -105,8 +114,11 @@ describe(`Coordination`, () => {
             expect(syncEngine.writeState).toHaveBeenNthCalledWith(2, ...diffStateReturnValue);
             expect(syncEngine.writeState).toHaveBeenNthCalledWith(3, ...diffStateReturnValue);
             expect(syncEngine.writeState).toHaveBeenNthCalledWith(4, ...diffStateReturnValue);
-            expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(4);
-            expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(4);
+            expect(mockedNetworkManager.settleRateLimiter).toHaveBeenCalledTimes(3);
+            expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(3);
+            expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(3);
+            expect(syncEngine.icloud.photos.setup).toHaveBeenCalledTimes(3);
+            expect((syncEngine as any).waitForRetryBackoff).toHaveBeenCalledTimes(3);
         });
 
         test.each([
@@ -134,7 +146,7 @@ describe(`Coordination`, () => {
             await syncEngine.sync();
 
             expect(startEvent).toHaveBeenCalled();
-            expect(retryEvent).toHaveBeenCalledWith(2, expectedError);
+            expect(retryEvent).toHaveBeenCalledWith(2, expect.objectContaining({message: expectedError.message}), 30000);
             expect(syncEngine.fetchAndLoadState).toHaveBeenCalledTimes(2);
             expect(syncEngine.diffState).toHaveBeenCalledTimes(2);
             expect(syncEngine.diffState).toHaveBeenNthCalledWith(1, ...fetchAndLoadStateReturnValue);
@@ -142,8 +154,11 @@ describe(`Coordination`, () => {
             expect(syncEngine.writeState).toHaveBeenCalledTimes(2);
             expect(syncEngine.writeState).toHaveBeenNthCalledWith(1, ...diffStateReturnValue);
             expect(syncEngine.writeState).toHaveBeenNthCalledWith(2, ...diffStateReturnValue);
+            expect(mockedNetworkManager.settleRateLimiter).toHaveBeenCalledTimes(1);
             expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.photos.setup).toHaveBeenCalledTimes(1);
+            expect((syncEngine as any).waitForRetryBackoff).toHaveBeenCalledWith(2, 30000);
             expect(doneEvent).toHaveBeenCalledTimes(1);
         });
 
@@ -166,14 +181,16 @@ describe(`Coordination`, () => {
             await expect(syncEngine.sync()).resolves.toEqual([[], []]);
 
             expect(startEvent).toHaveBeenCalled();
-            expect(retryEvent).toHaveBeenCalledWith(2, expect.objectContaining({message: `Unknown error during sync`}));
+            expect(retryEvent).toHaveBeenCalledWith(2, expect.objectContaining({message: `Unknown error during sync`}), 30000);
             expect(syncEngine.fetchAndLoadState).toHaveBeenCalledTimes(1);
             expect(syncEngine.diffState).toHaveBeenCalledTimes(1);
             expect(syncEngine.diffState).toHaveBeenNthCalledWith(1, ...fetchAndLoadStateReturnValue);
             expect(syncEngine.writeState).toHaveBeenCalledTimes(1);
             expect(syncEngine.writeState).toHaveBeenNthCalledWith(1, ...diffStateReturnValue);
+            expect(mockedNetworkManager.settleRateLimiter).toHaveBeenCalledTimes(1);
             expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.photos.setup).not.toHaveBeenCalled();
             expect(doneEvent).not.toHaveBeenCalled();
         });
 
@@ -195,13 +212,64 @@ describe(`Coordination`, () => {
 
             await syncEngine.sync();
 
-            expect(retryEvent).toHaveBeenCalledWith(2, new iCPSError(SYNC_ERR.NETWORK));
+            expect(retryEvent).toHaveBeenCalledWith(2, expect.objectContaining({message: `Network error during sync`}), 30000);
             expect(syncEngine.fetchAndLoadState).toHaveBeenCalledTimes(2);
             expect(syncEngine.diffState).toHaveBeenCalledTimes(2);
             expect(syncEngine.writeState).toHaveBeenCalledTimes(2);
+            expect(mockedNetworkManager.settleRateLimiter).toHaveBeenCalledTimes(1);
             expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.photos.setup).not.toHaveBeenCalled();
             expect(doneEvent).toHaveBeenCalledTimes(1);
+        });
+
+        test(`Classifies wrapped Axios errors by root request status`, async () => {
+            const error = new iCPSError(ICLOUD_PHOTOS_ERR.FETCH_RECORDS)
+                .addCause(new AxiosError(`Service unavailable`, `ERR_BAD_RESPONSE`, undefined, undefined, {status: 503} as AxiosResponse));
+
+            const retryEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.RETRY);
+            syncEngine.fetchAndLoadState = jest.fn<typeof syncEngine.fetchAndLoadState>()
+                .mockResolvedValue(fetchAndLoadStateReturnValue);
+            syncEngine.diffState = jest.fn<typeof syncEngine.diffState>()
+                .mockResolvedValue(diffStateReturnValue);
+            syncEngine.writeState = jest.fn<typeof syncEngine.writeState>()
+                .mockRejectedValueOnce(error)
+                .mockResolvedValueOnce();
+
+            await syncEngine.sync();
+
+            expect(retryEvent).toHaveBeenCalledWith(2, expect.objectContaining({message: `Network error during sync`}), 30000);
+            expect(mockedNetworkManager.settleRateLimiter).toHaveBeenCalledTimes(1);
+            expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.photos.setup).toHaveBeenCalledTimes(1);
+        });
+
+        test(`Does not retry non-retryable request errors`, async () => {
+            mockedResourceManager._resources.maxRetries = 4;
+
+            const error = new iCPSError(ICLOUD_PHOTOS_ERR.FETCH_RECORDS)
+                .addCause(new AxiosError(`Bad Request`, `ERR_BAD_REQUEST`, undefined, undefined, {status: 400} as AxiosResponse));
+
+            const retryEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.RETRY);
+            syncEngine.fetchAndLoadState = jest.fn<typeof syncEngine.fetchAndLoadState>()
+                .mockResolvedValue(fetchAndLoadStateReturnValue);
+            syncEngine.diffState = jest.fn<typeof syncEngine.diffState>()
+                .mockResolvedValue(diffStateReturnValue);
+            syncEngine.writeState = jest.fn<typeof syncEngine.writeState>()
+                .mockRejectedValue(error);
+
+            await expect(syncEngine.sync()).rejects.toThrow(/^Network error during sync$/);
+
+            expect(retryEvent).not.toHaveBeenCalled();
+            expect(syncEngine.fetchAndLoadState).toHaveBeenCalledTimes(1);
+            expect(syncEngine.diffState).toHaveBeenCalledTimes(1);
+            expect(syncEngine.writeState).toHaveBeenCalledTimes(1);
+            expect(mockedNetworkManager.settleRateLimiter).not.toHaveBeenCalled();
+            expect(mockedNetworkManager.settleCCYLimiter).not.toHaveBeenCalled();
+            expect(syncEngine.icloud.setupAccount).not.toHaveBeenCalled();
+            expect(syncEngine.icloud.photos.setup).not.toHaveBeenCalled();
+            expect((syncEngine as any).waitForRetryBackoff).not.toHaveBeenCalled();
         });
     });
 
