@@ -370,6 +370,28 @@ describe.each([
             expect(mockedNetworkManager.mock.history.post[0].params!.remapEnums).toEqual(`True`);
         });
 
+        test(`Follows continuation marker`, async () => {
+            mockedNetworkManager.mock
+                .onPost(`https://p123-ckdatabasews.icloud.com:443/database/1/com.apple.photos.cloud/production/${areaURL}/records/query`, expectedQuery)
+                .reply(200, {
+                    records: [`recordA`],
+                    continuationMarker: `next-page`,
+                });
+            mockedNetworkManager.mock
+                .onPost(`https://p123-ckdatabasews.icloud.com:443/database/1/com.apple.photos.cloud/production/${areaURL}/records/query`, {
+                    ...expectedQuery,
+                    continuationMarker: `next-page`,
+                })
+                .reply(200, {
+                    records: [`recordB`],
+                });
+
+            const result = await photos.performQuery(zone, recordType, filterBy, resultsLimit, desiredKeys);
+
+            expect(result).toEqual([`recordA`, `recordB`]);
+            expect(mockedNetworkManager.mock.history.post).toHaveLength(2);
+        });
+
         test(`No data returned`, async () => {
             mockedNetworkManager.mock
                 .onPost(`https://p123-ckdatabasews.icloud.com:443/database/1/com.apple.photos.cloud/production/${areaURL}/records/query`, expectedQuery)

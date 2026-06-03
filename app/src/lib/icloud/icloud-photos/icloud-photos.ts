@@ -1,4 +1,4 @@
-import {AxiosRequestConfig} from 'axios';
+import {AxiosError, AxiosRequestConfig, AxiosResponse} from 'axios';
 import fs from 'fs/promises';
 import {jsonc} from 'jsonc';
 import {ICLOUD_PHOTOS_ERR} from '../../../app/error/error-codes.js';
@@ -11,7 +11,7 @@ import {ENDPOINTS, PhotosSetupResponseZone} from '../../resources/network-types.
 import {SyncEngineHelper} from '../../sync-engine/helper.js';
 import * as QueryBuilder from './query-builder.js';
 import {CPLAlbum, CPLAsset, CPLMaster} from './query-parser.js';
-import {ZoneArea} from '../../resources/resource-types.js';
+import {PhotosAccountZone, ZoneArea} from '../../resources/resource-types.js';
 
 /**
  * To perform an operation, a record change tag is required. Hardcoding it for now
@@ -20,9 +20,14 @@ const RECORD_CHANGE_TAG = `21h2`;
 
 /**
  * The max record limit returned by iCloud.
- * Should be 200, but in order to divide by 3 (for albums) and 2 (for all pictures) 198 is more convenient
+ * Keeping this below the observed upper limit reduces pressure on the private Photos query indexes.
  */
-const MAX_RECORDS_LIMIT = 198;
+const MAX_RECORDS_LIMIT = 100;
+
+type PhotosQueryPage = {
+    records: any[],
+    continuationMarker?: string
+}
 
 /**
  * This class holds connection and state with the iCloud Photos Backend and provides functions to access the data stored there
@@ -166,6 +171,30 @@ export class iCloudPhotos {
      * @throws An iCPSError if the query fails
      */
     async performQuery(zone: QueryBuilder.Zones, recordType: string, filterBy?: any[], resultsLimit?: number, desiredKeys?: string[]): Promise<any[]> {
+        const records: any[] = [];
+        let continuationMarker: string | undefined;
+
+        do {
+            const page = await this.performQueryPage(zone, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker);
+            records.push(...page.records);
+            continuationMarker = page.continuationMarker;
+        } while (continuationMarker);
+
+        return records;
+    }
+
+    /**
+     * Performs a single paged query against the iCloud Photos Service.
+     * @param zone - Defines the zone to be used
+     * @param recordType - The requested record type
+     * @param filterBy - An array of filter instructions
+     * @param resultsLimit - Results limit for this page
+     * @param desiredKeys - The fields requested from the backend
+     * @param continuationMarker - Marker from a previous page
+     * @returns The page records and the next continuation marker, if present
+     * @throws An iCPSError if the query fails
+     */
+    private async performQueryPage(zone: QueryBuilder.Zones, recordType: string, filterBy?: any[], resultsLimit?: number, desiredKeys?: string[], continuationMarker?: string): Promise<PhotosQueryPage> {
         const config: AxiosRequestConfig = {
             params: {
                 remapEnums: `True`,
@@ -197,15 +226,126 @@ export class iCloudPhotos {
             data.resultsLimit = resultsLimit;
         }
 
-        const queryResponse = await Resources.network().post(ENDPOINTS.PHOTOS.AREAS[zoneId.area] + ENDPOINTS.PHOTOS.PATH.QUERY, data, config);
+        if (continuationMarker) {
+            data.continuationMarker = continuationMarker;
+        }
+
+        let queryResponse: AxiosResponse;
+        try {
+            queryResponse = await Resources.network().post(ENDPOINTS.PHOTOS.AREAS[zoneId.area] + ENDPOINTS.PHOTOS.PATH.QUERY, data, config);
+        } catch (err) {
+            this.logPhotosQueryFailure(zoneId, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker, err);
+            throw err;
+        }
 
         const fetchedRecords = queryResponse?.data?.records;
         if (!fetchedRecords || !Array.isArray(fetchedRecords)) {
+            this.logPhotosQueryFailure(zoneId, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker, undefined, queryResponse);
             throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_QUERY_RESPONSE)
                 .addContext(`queryResponse`, queryResponse);
         }
 
-        return fetchedRecords;
+        return {
+            records: fetchedRecords,
+            continuationMarker: typeof queryResponse.data.continuationMarker === `string` && queryResponse.data.continuationMarker.length > 0
+                ? queryResponse.data.continuationMarker
+                : undefined,
+        };
+    }
+
+    /**
+     * Logs safe query diagnostics for a failed Photos records/query request.
+     * @param zoneId - The zone used for the query
+     * @param recordType - The requested record type
+     * @param filterBy - Query filters
+     * @param resultsLimit - Results limit for this page
+     * @param desiredKeys - Desired record fields
+     * @param continuationMarker - Continuation marker from a previous page
+     * @param err - Optional request error
+     * @param response - Optional response for unexpected response shape
+     */
+    private logPhotosQueryFailure(zoneId: PhotosAccountZone, recordType: string, filterBy?: any[], resultsLimit?: number, desiredKeys?: string[], continuationMarker?: string, err?: unknown, response?: AxiosResponse) {
+        Resources.logger(this).warn(`Photos query failed: ${jsonc.stringify({
+            request: {
+                area: zoneId.area,
+                zone: {
+                    zoneName: zoneId.zoneName,
+                    zoneType: zoneId.zoneType,
+                },
+                endpoint: `${ENDPOINTS.PHOTOS.AREAS[zoneId.area]}${ENDPOINTS.PHOTOS.PATH.QUERY}`,
+                recordType,
+                filters: filterBy?.map(filter => this.getSafeQueryFilterContext(filter)) ?? [],
+                resultsLimit,
+                desiredKeys,
+                continuation: Boolean(continuationMarker),
+            },
+            response: this.getSafeQueryResponseContext(err, response),
+        })}`);
+    }
+
+    /**
+     * Extracts safe filter diagnostics without headers, cookies or request bodies.
+     * @param filter - The filter to summarize
+     * @returns Safe filter details
+     */
+    private getSafeQueryFilterContext(filter: any): Record<string, unknown> {
+        return {
+            fieldName: filter?.fieldName,
+            systemFieldName: filter?.systemFieldName,
+            comparator: filter?.comparator,
+            value: this.getSafeQueryValue(filter?.fieldValue?.value),
+            type: filter?.fieldValue?.type,
+        };
+    }
+
+    /**
+     * Keeps only primitive request diagnostic values.
+     * @param value - The value to sanitize
+     * @returns Safe diagnostic value
+     */
+    private getSafeQueryValue(value: unknown): unknown {
+        if (typeof value === `string` || typeof value === `number` || typeof value === `boolean`) {
+            return value;
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(item => this.getSafeQueryValue(item));
+        }
+
+        if (value && typeof value === `object` && `recordName` in value) {
+            return {
+                recordName: (value as {recordName?: unknown}).recordName,
+            };
+        }
+
+        if (value === undefined || value === null) {
+            return value;
+        }
+
+        return `<object>`;
+    }
+
+    /**
+     * Extracts safe response diagnostics from a query failure.
+     * @param err - Optional request error
+     * @param response - Optional response
+     * @returns Safe response context
+     */
+    private getSafeQueryResponseContext(err?: unknown, response?: AxiosResponse): Record<string, unknown> {
+        const axiosResponse = response ?? (err as AxiosError | undefined)?.response;
+        const data = axiosResponse?.data;
+
+        return {
+            status: axiosResponse?.status,
+            code: (err as AxiosError | undefined)?.code,
+            serverErrorCode: typeof data?.serverErrorCode === `string` ? data.serverErrorCode : undefined,
+            reason: typeof data?.reason === `string` ? data.reason : undefined,
+            retryAfter: typeof data?.retryAfter === `number` || typeof data?.retryAfter === `string`
+                ? data.retryAfter
+                : axiosResponse?.headers?.[`retry-after`],
+            recordsReturned: Array.isArray(data?.records) ? data.records.length : undefined,
+            continuationReturned: typeof data?.continuationMarker === `string` && data.continuationMarker.length > 0,
+        };
     }
 
     /**

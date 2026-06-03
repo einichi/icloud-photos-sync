@@ -271,6 +271,18 @@ describe(`Coordination`, () => {
             expect(syncEngine.icloud.photos.setup).not.toHaveBeenCalled();
             expect((syncEngine as any).waitForRetryBackoff).not.toHaveBeenCalled();
         });
+
+        test(`Uses retryAfter guidance for backoff`, () => {
+            (syncEngine as any).getRetryBackoffMs = (SyncEngine.prototype as any).getRetryBackoffMs;
+            const error = new AxiosError(`Service unavailable`, `ERR_BAD_RESPONSE`, undefined, undefined, {
+                status: 503,
+                data: {
+                    retryAfter: 7,
+                },
+            } as AxiosResponse);
+
+            expect((syncEngine as any).getRetryBackoffMs(2, error)).toBe(7000);
+        });
     });
 
     test(`Fetch & Load State`, async () => {

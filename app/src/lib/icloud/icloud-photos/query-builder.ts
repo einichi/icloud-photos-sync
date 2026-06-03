@@ -22,7 +22,6 @@ export const RECORD_TYPES = {
  * All relevant desired keys as provided to the backend
  */
 const DESIRED_KEYS = {
-    RECORD_NAME: `recordName`,
     IS_DELETED: `isDeleted`,
     ORIGINAL_RESOURCE: `resOriginalRes`,
     ORIGINAL_RESOURCE_FILE_TYPE: `resOriginalFileType`,
@@ -41,7 +40,6 @@ const DESIRED_KEYS = {
  * Desired keys, requested in queries in order for this application to be functioning
  */
 export const QUERY_KEYS = [
-    DESIRED_KEYS.RECORD_NAME,
     DESIRED_KEYS.ORIGINAL_RESOURCE,
     DESIRED_KEYS.ORIGINAL_RESOURCE_FILE_TYPE,
     DESIRED_KEYS.JPEG_RESOURCE,

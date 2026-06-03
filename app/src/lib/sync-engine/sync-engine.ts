@@ -80,7 +80,7 @@ export class SyncEngine {
                     break;
                 }
 
-                const backoffMs = this.getRetryBackoffMs(retryCount);
+                const backoffMs = this.getRetryBackoffMs(retryCount, err);
                 Resources.emit(iCPSEventSyncEngine.RETRY, retryCount, syncError, backoffMs);
 
                 await Resources.network().settleRateLimiter();
@@ -134,9 +134,15 @@ export class SyncEngine {
     /**
      * Computes a bounded exponential backoff delay with small jitter.
      * @param retryCount - The retry attempt number that will run after the delay
+     * @param err - The original error, inspected for retryAfter guidance
      * @returns Delay in milliseconds
      */
-    private getRetryBackoffMs(retryCount: number): number {
+    private getRetryBackoffMs(retryCount: number, err?: unknown): number {
+        const retryAfterMs = this.getRetryAfterMs(err);
+        if (retryAfterMs !== undefined) {
+            return retryAfterMs;
+        }
+
         const exponentialDelay = RETRY_BACKOFF_BASE_MS * (2 ** Math.max(retryCount - 2, 0));
         const cappedDelay = Math.min(exponentialDelay, RETRY_BACKOFF_MAX_MS);
         return cappedDelay + Math.floor(Math.random() * RETRY_BACKOFF_JITTER_MS);
@@ -232,7 +238,42 @@ export class SyncEngine {
             requestContext.status = axiosError.response.status;
         }
 
+        const retryAfterMs = this.getRetryAfterMs(axiosError);
+        if (retryAfterMs !== undefined) {
+            requestContext.retryAfterMs = retryAfterMs;
+        }
+
         return requestContext;
+    }
+
+    /**
+     * Extracts retryAfter guidance from CloudKit error payloads or HTTP headers.
+     * @param err - The original error
+     * @returns The delay in milliseconds, if provided
+     */
+    private getRetryAfterMs(err: unknown): number | undefined {
+        const axiosError = this.getAxiosError(err);
+        const responseData = axiosError?.response?.data as {retryAfter?: unknown} | undefined;
+        const retryAfter = responseData?.retryAfter ?? axiosError?.response?.headers?.[`retry-after`];
+        if (typeof retryAfter === `number` && Number.isFinite(retryAfter) && retryAfter > 0) {
+            return retryAfter * 1000;
+        }
+
+        if (typeof retryAfter !== `string` || retryAfter.length === 0) {
+            return undefined;
+        }
+
+        const retryAfterSeconds = Number.parseFloat(retryAfter);
+        if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+            return retryAfterSeconds * 1000;
+        }
+
+        const retryAfterDateMs = Date.parse(retryAfter);
+        if (Number.isFinite(retryAfterDateMs) && retryAfterDateMs > Date.now()) {
+            return retryAfterDateMs - Date.now();
+        }
+
+        return undefined;
     }
 
     /**
