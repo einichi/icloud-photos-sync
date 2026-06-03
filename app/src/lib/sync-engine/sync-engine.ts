@@ -14,6 +14,7 @@ const RETRY_BACKOFF_BASE_MS = 30 * 1000;
 const RETRY_BACKOFF_MAX_MS = 5 * 60 * 1000;
 const RETRY_BACKOFF_JITTER_MS = 5 * 1000;
 const RETRYABLE_HTTP_STATUS_CODES = new Set([408, 409, 421, 425, 429, 500, 502, 503, 504]);
+const ASSET_PROGRESS_LOG_INTERVAL = 25;
 
 /**
  * This class handles the photos sync
@@ -388,11 +389,19 @@ export class SyncEngine {
         const toBeAdded = processingQueue[1];
         // Initializing sync queue
 
-        Resources.logger(this).debug(`Writing data by deleting ${toBeDeleted.length} assets and adding ${toBeAdded.length} assets`);
+        Resources.logger(this).info(`Writing assets by deleting ${toBeDeleted.length} local asset(s) and adding ${toBeAdded.length} remote asset(s)`);
 
         // Deleting before downloading, in order to ensure no conflicts
         await Promise.all(toBeDeleted.map(asset => this.photosLibrary.deleteAsset(asset)));
-        await Promise.all(toBeAdded.map(asset => this.addAsset(asset)));
+
+        let completedAssets = 0;
+        await Promise.all(toBeAdded.map(async asset => {
+            await this.addAsset(asset);
+            completedAssets++;
+            if (completedAssets % ASSET_PROGRESS_LOG_INTERVAL === 0 || completedAssets === toBeAdded.length) {
+                Resources.logger(this).info(`Asset sync progress: ${completedAssets}/${toBeAdded.length}`);
+            }
+        }));
     }
 
     /**
@@ -403,16 +412,41 @@ export class SyncEngine {
      * @emits iCPSEventRuntimeWarning.WRITE_ASSET_ERROR - When an error occurs while writing the asset to disk - The first argument is the error, the second argument is the asset
      */
     async addAsset(asset: Asset) {
-        await this.icloud.photos.downloadAsset(asset);
-
         try {
+            await this.icloud.photos.downloadAsset(asset);
             await asset.verify();
         } catch (err) {
+            await this.deleteFailedAsset(asset);
             Resources.emit(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, err, asset);
             return;
         }
 
-        Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, asset.getDisplayName());
+        Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, this.getAssetProgressDisplayName(asset));
+    }
+
+    /**
+     * Removes a failed local asset so the next sync attempt starts with a clean download.
+     * @param asset - The asset that failed while being written
+     */
+    private async deleteFailedAsset(asset: Asset): Promise<void> {
+        try {
+            await this.photosLibrary.deleteAsset(asset);
+        } catch (err) {
+            Resources.logger(this).warn(`Unable to delete failed asset ${this.getAssetProgressDisplayName(asset)}: ${iCPSError.toiCPSError(err).getDescription()}`);
+        }
+    }
+
+    /**
+     * Gets a human-facing asset name for progress messages.
+     * @param asset - The asset being processed
+     * @returns A filename suitable for logs and the Web UI
+     */
+    private getAssetProgressDisplayName(asset: Asset): string {
+        if (asset.origFilename) {
+            return asset.getPrettyFilename();
+        }
+
+        return asset.getAssetFilename();
     }
 
     /**

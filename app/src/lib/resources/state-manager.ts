@@ -200,15 +200,15 @@ export class StateManager {
                     completedAssets: 0
                 }
             })
-            .on(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, () => {
+            .on(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, (assetName?: string) => {
                 this.inProgressAssets.completedAssets++
                 const inProgressPercentage = this.inProgressAssets.completedAssets/this.inProgressAssets.totalAssets
-                this.updateState(StateType.RUNNING, {progressMsg: `Syncing assets: ${this.inProgressAssets.completedAssets}/${this.inProgressAssets.totalAssets}`, progress: 25 + (inProgressPercentage * 65)});
+                this.updateState(StateType.RUNNING, {progressMsg: this.getAssetProgressMessage(assetName), progress: 25 + (inProgressPercentage * 65)});
             })
-            .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, () => {
+            .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, (_err?: Error, asset?: Asset) => {
                 this.inProgressAssets.completedAssets++
                 const inProgressPercentage = this.inProgressAssets.completedAssets/this.inProgressAssets.totalAssets
-                this.updateState(StateType.RUNNING, {progressMsg: `Syncing assets: ${this.inProgressAssets.completedAssets}/${this.inProgressAssets.totalAssets}`, progress: 25 + (inProgressPercentage * 65)});
+                this.updateState(StateType.RUNNING, {progressMsg: this.getAssetProgressMessage(this.getAssetDisplayName(asset)), progress: 25 + (inProgressPercentage * 65)});
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED, () => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Asset sync completed!`, progress: 90});
@@ -329,6 +329,33 @@ export class StateManager {
             }
         }
         Resources.event().emit(iCPSState.STATE_CHANGED, this.serialize())
+    }
+
+    /**
+     * Builds an asset sync progress message with an optional filename.
+     * @param assetName - The filename currently being processed
+     * @returns A progress message
+     */
+    private getAssetProgressMessage(assetName?: string): string {
+        const baseMessage = `Syncing assets: ${this.inProgressAssets.completedAssets}/${this.inProgressAssets.totalAssets}`;
+        return assetName ? `${baseMessage} - ${assetName}` : baseMessage;
+    }
+
+    /**
+     * Gets a human-facing asset name for state updates.
+     * @param asset - The asset being processed
+     * @returns A filename suitable for the Web UI
+     */
+    private getAssetDisplayName(asset?: Asset): string | undefined {
+        if (!asset) {
+            return undefined;
+        }
+
+        if (asset.origFilename) {
+            return asset.getPrettyFilename();
+        }
+
+        return asset.getAssetFilename();
     }
 
     /**

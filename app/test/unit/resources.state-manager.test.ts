@@ -328,14 +328,14 @@ describe(`State changes`, () => {
             } as SerializedState
         },{
             desc: `Should handle write asset completed (triggered by sync)`,
-            events: [iCPSEventApp.SCHEDULED_START, [iCPSEventSyncEngine.WRITE_ASSETS, 0, 10, 0], iCPSEventSyncEngine.WRITE_ASSET_COMPLETED],
+            events: [iCPSEventApp.SCHEDULED_START, [iCPSEventSyncEngine.WRITE_ASSETS, 0, 10, 0], [iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, `IMG_3490.HEIC`]],
             serializedState: {
                 state: `running`,
                 nextSync: undefined,
                 prevError: undefined,
                 prevTrigger: `sync`,
                 progress: 31.5,
-                progressMsg: `Syncing assets: 1/10`
+                progressMsg: `Syncing assets: 1/10 - IMG_3490.HEIC`
             } as SerializedState
         },{
             desc: `Should handle write asset completed twice (triggered by sync)`,

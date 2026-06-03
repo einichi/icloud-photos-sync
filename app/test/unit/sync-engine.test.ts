@@ -439,9 +439,9 @@ describe(`Handle processing queue`, () => {
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(3, asset3);
 
             expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(3);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `somechecksum1`);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `somechecksum2`);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(3, `somechecksum3`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `test1-edited.png`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `test2-edited.png`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(3, `test3.png`);
 
             expect(writeAssetErrorEvent).not.toHaveBeenCalled();
 
@@ -469,10 +469,11 @@ describe(`Handle processing queue`, () => {
             expect(writeAssetErrorEvent).toHaveBeenCalledTimes(1);
 
             expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(2);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `somechecksum1`);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `somechecksum2`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `test1-edited.png`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `test2-edited.png`);
 
-            expect(syncEngine.photosLibrary.deleteAsset).not.toHaveBeenCalled();
+            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledTimes(1);
+            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledWith(asset3);
         });
 
         test(`Only adding with download error`, async () => {
@@ -483,14 +484,15 @@ describe(`Handle processing queue`, () => {
             const asset3 = new Asset(`somechecksum3`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, `somechecksum3`, `https://icloud.com`, `somerecordname3`, false);
             asset3.verify = jest.fn<typeof asset3.verify>();
 
+            const downloadError = new Error(`download error`);
             syncEngine.icloud.photos.downloadAsset = jest.fn<typeof syncEngine.icloud.photos.downloadAsset>()
                 .mockResolvedValueOnce()
                 .mockResolvedValueOnce()
-                .mockRejectedValueOnce(new Error());
+                .mockRejectedValueOnce(downloadError);
 
             const toBeAdded = [asset1, asset2, asset3];
 
-            await expect(syncEngine.writeAssets([[], toBeAdded, []])).rejects.toThrow();
+            await expect(syncEngine.writeAssets([[], toBeAdded, []])).resolves.toBeUndefined();
 
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledTimes(3);
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(1, asset1);
@@ -498,10 +500,13 @@ describe(`Handle processing queue`, () => {
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(3, asset3);
 
             expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(2);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `somechecksum1`);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `somechecksum2`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `test1-edited.png`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `test2-edited.png`);
+            expect(writeAssetErrorEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetErrorEvent).toHaveBeenCalledWith(downloadError, asset3);
 
-            expect(syncEngine.photosLibrary.deleteAsset).not.toHaveBeenCalled();
+            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledTimes(1);
+            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledWith(asset3);
         });
 
         test(`Adding & deleting`, async () => {
@@ -525,9 +530,9 @@ describe(`Handle processing queue`, () => {
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(3, asset3);
 
             expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(3);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `somechecksum1`);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `somechecksum2`);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(3, `somechecksum3`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `test1-edited.png`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `test2-edited.png`);
+            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(3, `test3.png`);
 
             expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledTimes(3);
             expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenNthCalledWith(1, asset4);
