@@ -86,6 +86,18 @@ function setStateText(text) {
     document.querySelector("#state-text").innerHTML = text
 }
 
+function escapeHtml(text) {
+    const el = document.createElement("span");
+    el.textContent = text ?? "";
+    return el.innerHTML;
+}
+
+function setRunningStateText(text, detail) {
+    const safeText = escapeHtml(text ?? "Syncing...");
+    const safeDetail = detail ? "<span class='progress-detail'>" + escapeHtml(detail) + "</span>" : "";
+    document.querySelector("#state-text").innerHTML = safeText + safeDetail;
+}
+
 function setProgress(progress) {
     if(progress && progress >= 0) {
         document.getElementById('progress-container').style.display = "block";
@@ -175,7 +187,7 @@ function updateState(state) {
             // Decrease time between refresh while application is running
             setTimeout(() => refreshState(), 500);
 
-            setStateText(state.progressMsg ?? 'Syncing...')
+            setRunningStateText(state.progressMsg, state.progressDetail)
             setProgress(state.progress)
             enableSymbol('running')
 

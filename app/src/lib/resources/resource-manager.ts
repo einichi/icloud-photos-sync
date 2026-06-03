@@ -42,11 +42,15 @@ export class ResourceManager {
      * @param appOptions - The parsed app options
      */
     constructor(appOptions: iCPSAppOptions) {
+        this._resources.dataDir = appOptions.dataDir;
+        const resourceFile = this._readResourceFile();
         // Assign app options & resource files to this data structure
-        Object.assign(this._resources, this._readResourceFile(), removeUndefinedOptions(appOptions));
+        Object.assign(this._resources, resourceFile, removeUndefinedOptions(appOptions));
+        Resources.logger(this).info(`Resource manager initialized with data dir ${this.dataDir} (resource file trust token: ${resourceFile.trustToken ? `present` : `absent`}, effective trust token: ${this._resources.trustToken ? `present` : `absent`})`);
 
         // If trustToken should be refreshed, we clear it now
         if(this._resources.refreshToken) {
+            Resources.logger(this).warn(`Refresh token option is enabled; clearing stored iCloud trust token`);
             this._resources.trustToken = undefined
         }
         // Making sure new merged configuration is persisted to file
@@ -60,8 +64,11 @@ export class ResourceManager {
         try {
             Resources.logger(this).debug(`Reading resource file from ${this.resourceFilePath}`);
             const resourceFileData = jsonc.parse(readFileSync(this.resourceFilePath, {encoding: FILE_ENCODING}));
-            return Resources.validator().validateResourceFile(resourceFileData);
+            const resourceFile = Resources.validator().validateResourceFile(resourceFileData);
+            Resources.logger(this).info(`Loaded resource file from ${this.resourceFilePath} (trust token: ${resourceFile.trustToken ? `present` : `absent`})`);
+            return resourceFile;
         } catch (err) {
+            Resources.logger(this).warn(`Unable to load resource file from ${this.resourceFilePath}; using default resource file`);
             Resources.emit(iCPSEventRuntimeWarning.RESOURCE_FILE_ERROR,
                 new iCPSError(RESOURCES_ERR.UNABLE_TO_READ_FILE).addCause(err));
             return {
@@ -83,7 +90,7 @@ export class ResourceManager {
                 notificationSubscriptions: this._resources.notificationSubscriptions
             };
             const resourceFileData = jsonc.stringify(formattedResourceFile, null, 4);
-            Resources.logger(this).debug(`Writing resource file to ${this.resourceFilePath}`);
+            Resources.logger(this).info(`Writing resource file to ${this.resourceFilePath} (trust token: ${formattedResourceFile.trustToken ? `present` : `absent`})`);
 
             writeFileSync(this.resourceFilePath, resourceFileData, {encoding: FILE_ENCODING, flush: true});
         } catch (err) {
@@ -162,8 +169,14 @@ export class ResourceManager {
      * @returns The currently used trust token, or undefined if none is set.
      */
     get trustToken(): string | undefined {
+        const previousTrustToken = this._resources.trustToken;
         const resourceFile = this._readResourceFile();
-        this._resources.trustToken = resourceFile.trustToken;
+        if (resourceFile.trustToken || !previousTrustToken) {
+            this._resources.trustToken = resourceFile.trustToken;
+        } else {
+            Resources.logger(this).warn(`Resource file at ${this.resourceFilePath} has no trust token; retaining in-memory trust token`);
+        }
+        Resources.logger(this).info(`Trust token lookup from ${this.resourceFilePath}: ${this._resources.trustToken ? `present` : `absent`}`);
 
         return this._resources.trustToken;
     }

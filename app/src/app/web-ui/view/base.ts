@@ -1,5 +1,4 @@
 import {Resources} from "../../../lib/resources/main.js";
-import {logoBase64} from "../assets/logo.js";
 import {viewCSS, viewCSSDark} from "../css/base-css.js";
 import {logCSS, logCSSDark} from "../css/log-css.js";
 import {navigationHelperScript} from "../scripts/base-scripts.js";
@@ -30,7 +29,7 @@ export abstract class View {
                     <span>Enable Notifications</span>
                 </button>
                 <div class="content">
-                    <img src="data:image/png;base64,${logoBase64}" class="logo" alt="ICPS Logo">
+                    <img src="${Resources.manager().webBasePath}/logo.webp" class="logo" alt="ICPS Logo">
                     <div class="innerContent">
                         ${this.content}
                     </div>

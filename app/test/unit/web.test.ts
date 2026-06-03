@@ -258,11 +258,24 @@ describe.each([
             url: `${webBasePath}/icon.png`
         })
         const res = await sendMockedRequest(webServer, req)
-        
+
         expect(res._getStatusCode()).toEqual(200)
         expect(res.getHeader(`Content-Type`)).toEqual(`image/png`)
         expect(res._getHeaders()[`content-length`]).toEqual(32480)
         expect(res._getBuffer().length).toEqual(32480)
+    })
+
+    test(`Serve logo`, async () => {
+        const req = createRequest<IncomingMessage>({
+            method: `GET`,
+            url: `${webBasePath}/logo.webp`
+        })
+        const res = await sendMockedRequest(webServer, req)
+
+        expect(res._getStatusCode()).toEqual(200)
+        expect(res.getHeader(`Content-Type`)).toEqual(`image/webp`)
+        expect(res._getHeaders()[`content-length`]).toBeGreaterThan(0)
+        expect(res._getBuffer().length).toBeGreaterThan(0)
     })
 
     test(`Serve favicon`, async () => {
@@ -1145,6 +1158,18 @@ describe.each([
                 expect(getByTestId(site.body, `progress-bar`).style.width).toBe(`1%`);
 
                 expect(getByTestId(site.body, `next-sync-text`)).not.toBeVisible();
+            })
+
+            test(`Handle 'running' asset progress detail`, async () => {
+                mockedEventManager.emit(iCPSEventApp.SCHEDULED_START)
+                mockedEventManager.emit(iCPSEventSyncEngine.WRITE_ASSETS, 0, 10, 0)
+                mockedEventManager.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, `IMG_3490.HEIC`)
+                await site.load(`${webBasePath}/state`)
+
+                await site.dom.window.refreshState()
+
+                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Syncing assets: 1/10IMG_3490.HEIC`);
+                expect(site.body.querySelector(`.progress-detail`)).toHaveTextContent(`IMG_3490.HEIC`);
             })
         })
 

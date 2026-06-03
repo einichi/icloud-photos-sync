@@ -51,6 +51,7 @@ export type SerializedState = {
     prevTrigger?: StateTrigger,
     progress?: number,
     progressMsg?: string,
+    progressDetail?: string,
     trustedPhoneNumbers?: {
         id: number,
         maskedNumber: string
@@ -84,6 +85,7 @@ export class StateManager {
      */
     inProgressContext: {
         message?: string,
+        detail?: string,
         progress?: number
     } = {}
 
@@ -203,12 +205,12 @@ export class StateManager {
             .on(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, (assetName?: string) => {
                 this.inProgressAssets.completedAssets++
                 const inProgressPercentage = this.inProgressAssets.completedAssets/this.inProgressAssets.totalAssets
-                this.updateState(StateType.RUNNING, {progressMsg: this.getAssetProgressMessage(assetName), progress: 25 + (inProgressPercentage * 65)});
+                this.updateState(StateType.RUNNING, {progressMsg: this.getAssetProgressMessage(), progressDetail: assetName, progress: 25 + (inProgressPercentage * 65)});
             })
             .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, (_err?: Error, asset?: Asset) => {
                 this.inProgressAssets.completedAssets++
                 const inProgressPercentage = this.inProgressAssets.completedAssets/this.inProgressAssets.totalAssets
-                this.updateState(StateType.RUNNING, {progressMsg: this.getAssetProgressMessage(this.getAssetDisplayName(asset)), progress: 25 + (inProgressPercentage * 65)});
+                this.updateState(StateType.RUNNING, {progressMsg: this.getAssetProgressMessage(), progressDetail: this.getAssetDisplayName(asset), progress: 25 + (inProgressPercentage * 65)});
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED, () => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Asset sync completed!`, progress: 90});
@@ -308,7 +310,7 @@ export class StateManager {
      * @param ctx - context for the new state, note: only relevant properties will be overwritten
      * @emits iCPSState.STATE_CHANGED with a serialized copy of the new state
      */
-    updateState(newState: StateType, ctx? : {error?: iCPSError, nextSync?: number, progress?: number, progressMsg?: string, trustedPhoneNumbers?: TrustedPhoneNumber[]}) {
+    updateState(newState: StateType, ctx? : {error?: iCPSError, nextSync?: number, progress?: number, progressMsg?: string, progressDetail?: string, trustedPhoneNumbers?: TrustedPhoneNumber[]}) {
         this.timestamp = Date.now();
         this.state = newState;
         if(ctx) {
@@ -321,7 +323,8 @@ export class StateManager {
             if(ctx.progress || ctx.progressMsg) {
                 this.inProgressContext = {
                     progress: ctx.progress,
-                    message: ctx.progressMsg
+                    message: ctx.progressMsg,
+                    detail: ctx.progressDetail,
                 }
             }
             if(ctx.trustedPhoneNumbers) {
@@ -332,13 +335,11 @@ export class StateManager {
     }
 
     /**
-     * Builds an asset sync progress message with an optional filename.
-     * @param assetName - The filename currently being processed
+     * Builds an asset sync progress message.
      * @returns A progress message
      */
-    private getAssetProgressMessage(assetName?: string): string {
-        const baseMessage = `Syncing assets: ${this.inProgressAssets.completedAssets}/${this.inProgressAssets.totalAssets}`;
-        return assetName ? `${baseMessage} - ${assetName}` : baseMessage;
+    private getAssetProgressMessage(): string {
+        return `Syncing assets: ${this.inProgressAssets.completedAssets}/${this.inProgressAssets.totalAssets}`;
     }
 
     /**
@@ -438,6 +439,7 @@ export class StateManager {
             timestamp: this.timestamp,
             progress: this.inProgressContext?.progress,
             progressMsg: this.inProgressContext?.message,
+            progressDetail: this.inProgressContext?.detail,
             trustedPhoneNumbers
         };
     }

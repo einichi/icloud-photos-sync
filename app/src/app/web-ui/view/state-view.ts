@@ -12,7 +12,7 @@ const failedSymbol = `<?xml version="1.0" encoding="utf-8"?><svg version="1.1" i
 export class StateView extends View {
     protected override get content(): string {
         return `
-            <div class="state-symbol" id="unknown-symbol" style="display: block">?</div>
+            <div class="state-symbol" id="unknown-symbol" style="display: block">🍎</div>
 
             <div class="state-symbol" id="ok-symbol">${checkSymbol}</div>
             <div class="state-symbol" id="error-symbol">${failedSymbol}</div>

@@ -335,7 +335,8 @@ describe(`State changes`, () => {
                 prevError: undefined,
                 prevTrigger: `sync`,
                 progress: 31.5,
-                progressMsg: `Syncing assets: 1/10 - IMG_3490.HEIC`
+                progressMsg: `Syncing assets: 1/10`,
+                progressDetail: `IMG_3490.HEIC`
             } as SerializedState
         },{
             desc: `Should handle write asset completed twice (triggered by sync)`,

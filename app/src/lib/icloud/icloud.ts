@@ -25,6 +25,16 @@ export class iCloud {
     mfaTimeout: NodeJS.Timeout;
 
     /**
+     * Trust token snapshot used for the active authentication attempt.
+     */
+    private currentAuthenticationTrustToken?: string;
+
+    /**
+     * Whether an authentication attempt has already looked up the trust token.
+     */
+    private hasCurrentAuthenticationTrustToken = false;
+
+    /**
      * Creates a new iCloud Object
      * @param ignoreFailOnMfa - If set to true, the authentication will still continue even if MFA is required and the failOnMfa flag is set
      * @emits iCPSEventCloud.ERROR - If the MFA code is required and the failOnMfa flag is set - the iCPSError is provided as argument
@@ -88,8 +98,12 @@ export class iCloud {
      */
     async authenticate(): Promise<boolean> {
         const ready = this.getReady();
+        const trustToken = Resources.manager().trustToken;
+        this.currentAuthenticationTrustToken = trustToken;
+        this.hasCurrentAuthenticationTrustToken = true;
         Resources.logger(this).info(`Authenticating user`);
-        Resources.logger(this).info(Resources.manager().trustToken
+        Resources.logger(this).info(`iCloud trust token lookup at ${Resources.manager().resourceFilePath}: ${trustToken ? `present` : `absent`}`);
+        Resources.logger(this).info(trustToken
             ? `Using stored iCloud trust token for authentication`
             : `No stored iCloud trust token available; MFA may be required`);
         Resources.emit(iCPSEventCloud.AUTHENTICATION_STARTED);
@@ -116,6 +130,9 @@ export class iCloud {
 
             if (response.status === 409) {
                 Resources.logger(this).debug(`Response status is 409, requiring MFA`);
+                if (trustToken) {
+                    Resources.logger(this).warn(`iCloud required MFA even though a stored trust token was included; the token may be expired, revoked, or not accepted by Apple`);
+                }
                 const trustedPhoneNumbers = await this.getTrustedPhoneNumbers()
                 Resources.emit(iCPSEventCloud.MFA_REQUIRED, trustedPhoneNumbers);
                 return;
@@ -123,7 +140,7 @@ export class iCloud {
 
             if (response.status === 200) {
                 Resources.logger(this).debug(`Response status is 200, authentication successful - device trusted`);
-                Resources.emit(iCPSEventCloud.TRUSTED, Resources.manager().trustToken);
+                Resources.emit(iCPSEventCloud.TRUSTED, trustToken);
             }
 
             // This should never happen
@@ -157,6 +174,8 @@ export class iCloud {
             Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.UNKNOWN).addCause(err));
             return;
         } finally {
+            this.currentAuthenticationTrustToken = undefined;
+            this.hasCurrentAuthenticationTrustToken = false;
             // Return in finally is required because control flow of try/catch block is complicated
             // eslint-disable-next-line no-unsafe-finally
             return ready;
@@ -168,7 +187,10 @@ export class iCloud {
      * @returns An array containing the trust token if present, otherwise an empty array
      */
     private getTrustTokens(): string[] {
-        const trustToken = Resources.manager().trustToken;
+        const trustToken = this.hasCurrentAuthenticationTrustToken
+            ? this.currentAuthenticationTrustToken
+            : Resources.manager().trustToken;
+        Resources.logger(this).info(`Authentication payload ${trustToken ? `will include` : `will not include`} an iCloud trust token`);
         return trustToken ? [trustToken] : [];
     }
 

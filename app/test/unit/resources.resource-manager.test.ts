@@ -87,6 +87,26 @@ describe(`ResourceManager`, () => {
             });
         });
 
+        test(`should read the resource file from the configured data dir during construction`, () => {
+            const resourceFilePaths: string[] = [];
+            ResourceManager.prototype._readResourceFile = jest.fn(function (this: ResourceManager) {
+                resourceFilePaths.push(this.resourceFilePath);
+                return {
+                    libraryVersion: 1,
+                    trustToken: Config.trustToken,
+                };
+            });
+
+            new ResourceManager({
+                ...Config.defaultConfig,
+                trustToken: undefined,
+            });
+
+            expect(resourceFilePaths).toEqual([
+                path.join(Config.defaultConfig.dataDir, `.icloud-photos-sync`),
+            ]);
+        });
+
         test(`should keep the resource file trustToken when appOptions trustToken is undefined`, () => {
             (ResourceManager.prototype._readResourceFile as jest.Mock)
                 .mockReturnValue({
@@ -483,6 +503,17 @@ describe(`ResourceManager`, () => {
                         trustToken: undefined,
                     });
                 expect(resourceManager.trustToken).toBeUndefined();
+                expect(resourceManager._readResourceFile).toHaveBeenCalled();
+            });
+
+            test(`should retain an in-memory trust token if the resource file returns no token`, () => {
+                resourceManager._resources.trustToken = Config.trustTokenModified;
+                resourceManager._readResourceFile = jest.fn<typeof resourceManager._readResourceFile>()
+                    .mockReturnValue({
+                        libraryVersion: 1,
+                        trustToken: undefined,
+                    });
+                expect(resourceManager.trustToken).toEqual(Config.trustTokenModified);
                 expect(resourceManager._readResourceFile).toHaveBeenCalled();
             });
         });

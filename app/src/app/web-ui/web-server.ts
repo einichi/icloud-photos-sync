@@ -1,4 +1,5 @@
 import * as http from 'http';
+import {readFileSync} from 'fs';
 import {jsonc} from 'jsonc';
 import {MFAMethod} from '../../lib/icloud/mfa/mfa-method.js';
 import {iCPSEventMFA, iCPSEventRuntimeWarning, iCPSEventWebServer} from '../../lib/resources/events-types.js';
@@ -16,6 +17,8 @@ import {LogLevel, StateType} from '../../lib/resources/state-manager.js';
 import {NotificationPusher} from './notification-pusher.js';
 import {URL} from 'url';
 import {pEvent} from 'p-event';
+
+const logoWebp = readFileSync(new URL(`./assets/logo.webp`, import.meta.url));
 
 type WebServerResponse = {
     code: number, 
@@ -69,6 +72,7 @@ export class WebServer {
             '/service-worker.js': this.handleServiceWorker.bind(this),
             '/manifest.json': this.handleManifest.bind(this),
             '/icon.png': this.handleIcon.bind(this),
+            '/logo.webp': this.handleLogo.bind(this),
             '/favicon.ico': this.handleFavicon.bind(this),
             '/api/state': this.handleStateRequest.bind(this),
             '/api/log': this.handleLogRequest.bind(this),
@@ -273,6 +277,17 @@ export class WebServer {
                 'Content-Length': iconBuffer.length,
             },
             body: iconBuffer
+        }
+    }
+
+    handleLogo(): WebServerResponse {
+        return {
+            code: 200,
+            header: {
+                'Content-Type': `image/webp`,
+                'Content-Length': logoWebp.length,
+            },
+            body: logoWebp
         }
     }
 

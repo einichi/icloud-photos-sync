@@ -11,6 +11,11 @@ export const stateViewCSS = `
     width: 100%;
     height: 100%;
 }
+#unknown-symbol {
+    color: inherit;
+    font-size: 4rem;
+    line-height: 1;
+}
 #running-symbol {
     animation: rotate 10s linear infinite;
 }
@@ -28,6 +33,13 @@ export const stateViewCSS = `
     margin: auto;
     margin-top: 1rem;
     margin-bottom: 1rem;
+}
+.progress-detail {
+    display: block;
+    margin-top: 0.35rem;
+    overflow-wrap: anywhere;
+    font-family: monospace;
+    font-size: 0.9rem;
 }
 #next-sync-text {
     text-align: center;
