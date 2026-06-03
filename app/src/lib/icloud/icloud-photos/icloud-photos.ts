@@ -23,6 +23,7 @@ const RECORD_CHANGE_TAG = `21h2`;
  * Keeping this below the observed upper limit reduces pressure on the private Photos query indexes.
  */
 const MAX_RECORDS_LIMIT = 100;
+const PHOTOS_METADATA_REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
 
 type PhotosQueryPage = {
     records: any[],
@@ -37,6 +38,11 @@ export class iCloudPhotos {
      * A promise that will resolve, once the object is ready or reject, in case there is an error
      */
     ready: Promise<void>;
+
+    /**
+     * Counter used to correlate verbose query start, completion and failure logs.
+     */
+    queryTraceCounter: number = 0;
 
     /**
      * Creates a new iCloud Photos Class
@@ -199,6 +205,7 @@ export class iCloudPhotos {
             params: {
                 remapEnums: `True`,
             },
+            timeout: PHOTOS_METADATA_REQUEST_TIMEOUT_MS,
         };
 
         const zoneId = QueryBuilder.getZoneID(zone)
@@ -230,20 +237,30 @@ export class iCloudPhotos {
             data.continuationMarker = continuationMarker;
         }
 
+        const traceId = ++this.queryTraceCounter;
+        const startedAt = Date.now();
+        const requestContext = this.getSafeQueryRequestContext(zoneId, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker);
+        Resources.logger(this).info(`Photos query #${traceId} started: ${jsonc.stringify(requestContext)}`);
+
         let queryResponse: AxiosResponse;
         try {
             queryResponse = await Resources.network().post(ENDPOINTS.PHOTOS.AREAS[zoneId.area] + ENDPOINTS.PHOTOS.PATH.QUERY, data, config);
         } catch (err) {
-            this.logPhotosQueryFailure(zoneId, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker, err);
+            this.logPhotosQueryFailure(traceId, startedAt, zoneId, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker, err);
             throw err;
         }
 
         const fetchedRecords = queryResponse?.data?.records;
         if (!fetchedRecords || !Array.isArray(fetchedRecords)) {
-            this.logPhotosQueryFailure(zoneId, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker, undefined, queryResponse);
+            this.logPhotosQueryFailure(traceId, startedAt, zoneId, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker, undefined, queryResponse);
             throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_QUERY_RESPONSE)
                 .addContext(`queryResponse`, queryResponse);
         }
+
+        Resources.logger(this).info(`Photos query #${traceId} completed in ${Date.now() - startedAt}ms: ${jsonc.stringify({
+            recordsReturned: fetchedRecords.length,
+            continuationReturned: typeof queryResponse.data.continuationMarker === `string` && queryResponse.data.continuationMarker.length > 0,
+        })}`);
 
         return {
             records: fetchedRecords,
@@ -264,23 +281,38 @@ export class iCloudPhotos {
      * @param err - Optional request error
      * @param response - Optional response for unexpected response shape
      */
-    private logPhotosQueryFailure(zoneId: PhotosAccountZone, recordType: string, filterBy?: any[], resultsLimit?: number, desiredKeys?: string[], continuationMarker?: string, err?: unknown, response?: AxiosResponse) {
-        Resources.logger(this).warn(`Photos query failed: ${jsonc.stringify({
-            request: {
-                area: zoneId.area,
-                zone: {
-                    zoneName: zoneId.zoneName,
-                    zoneType: zoneId.zoneType,
-                },
-                endpoint: `${ENDPOINTS.PHOTOS.AREAS[zoneId.area]}${ENDPOINTS.PHOTOS.PATH.QUERY}`,
-                recordType,
-                filters: filterBy?.map(filter => this.getSafeQueryFilterContext(filter)) ?? [],
-                resultsLimit,
-                desiredKeys,
-                continuation: Boolean(continuationMarker),
-            },
+    private logPhotosQueryFailure(traceId: number, startedAt: number, zoneId: PhotosAccountZone, recordType: string, filterBy?: any[], resultsLimit?: number, desiredKeys?: string[], continuationMarker?: string, err?: unknown, response?: AxiosResponse) {
+        Resources.logger(this).warn(`Photos query #${traceId} failed after ${Date.now() - startedAt}ms: ${jsonc.stringify({
+            request: this.getSafeQueryRequestContext(zoneId, recordType, filterBy, resultsLimit, desiredKeys, continuationMarker),
             response: this.getSafeQueryResponseContext(err, response),
         })}`);
+    }
+
+    /**
+     * Extracts safe request diagnostics without headers, cookies or request bodies.
+     * @param zoneId - The zone used for the query
+     * @param recordType - The requested record type
+     * @param filterBy - Query filters
+     * @param resultsLimit - Results limit for this page
+     * @param desiredKeys - Desired record fields
+     * @param continuationMarker - Continuation marker from a previous page
+     * @returns Safe request context
+     */
+    private getSafeQueryRequestContext(zoneId: PhotosAccountZone, recordType: string, filterBy?: any[], resultsLimit?: number, desiredKeys?: string[], continuationMarker?: string): Record<string, unknown> {
+        return {
+            area: zoneId.area,
+            zone: {
+                zoneName: zoneId.zoneName,
+                zoneType: zoneId.zoneType,
+            },
+            endpoint: `${ENDPOINTS.PHOTOS.AREAS[zoneId.area]}${ENDPOINTS.PHOTOS.PATH.QUERY}`,
+            recordType,
+            filters: filterBy?.map(filter => this.getSafeQueryFilterContext(filter)) ?? [],
+            resultsLimit,
+            desiredKeys,
+            timeoutMs: PHOTOS_METADATA_REQUEST_TIMEOUT_MS,
+            continuation: Boolean(continuationMarker),
+        };
     }
 
     /**
@@ -404,6 +436,9 @@ export class iCloudPhotos {
      */
     async fetchAllCPLAlbums(): Promise<CPLAlbum[]> {
         try {
+            const startedAt = Date.now();
+            Resources.logger(this).info(`Fetching iCloud album metadata tree`);
+
             // Processing queue
             const queue: Promise<CPLAlbum[]>[] = [];
 
@@ -427,6 +462,7 @@ export class iCloudPhotos {
                 }
             }
 
+            Resources.logger(this).info(`Fetched ${albumRecords.length} iCloud album metadata records in ${Date.now() - startedAt}ms`);
             return albumRecords;
         } catch (err) {
             throw new iCPSError(ICLOUD_PHOTOS_ERR.FOLDER_STRUCTURE).addCause(err);
@@ -482,6 +518,8 @@ export class iCloudPhotos {
      * @returns An array of folder and album records. Unwanted folders and folder types are filtered out. Albums have their items included (as a promise)
      */
     async fetchCPLAlbums(parentId?: string): Promise<CPLAlbum[]> {
+        const startedAt = Date.now();
+        Resources.logger(this).info(`Fetching iCloud album records for ${parentId === undefined ? `root folder` : `parent ${parentId}`}`);
         const cplAlbums: CPLAlbum[] = [];
 
         for (const album of await this.buildAlbumRecordsRequest(parentId)) {
@@ -511,6 +549,7 @@ export class iCloudPhotos {
             }
         }
 
+        Resources.logger(this).info(`Fetched ${cplAlbums.length} iCloud album records for ${parentId === undefined ? `root folder` : `parent ${parentId}`} in ${Date.now() - startedAt}ms`);
         return cplAlbums;
     }
 
@@ -524,13 +563,17 @@ export class iCloudPhotos {
      */
     async getPictureRecordsCountForZone(zone: QueryBuilder.Zones, albumId?: string): Promise<number> {
         try {
+            const startedAt = Date.now();
+            Resources.logger(this).info(`Counting iCloud photo metadata records for album ${albumId === undefined ? `All photos` : albumId} in ${zone} library`);
             const indexCountFilter = QueryBuilder.getIndexCountFilter(albumId);
             const countData = await this.performQuery(
                 zone,
                 QueryBuilder.RECORD_TYPES.INDEX_COUNT,
                 [indexCountFilter],
             );
-            return Number.parseInt(countData[0].fields.itemCount.value, 10);
+            const recordCount = Number.parseInt(countData[0].fields.itemCount.value, 10);
+            Resources.logger(this).info(`Counted ${recordCount} iCloud photo metadata records for album ${albumId === undefined ? `All photos` : albumId} in ${zone} library in ${Date.now() - startedAt}ms`);
+            return recordCount;
         } catch (err) {
             throw new iCPSError(ICLOUD_PHOTOS_ERR.COUNT_DATA)
                 .addMessage(`zone ${zone}`)
@@ -634,6 +677,7 @@ export class iCloudPhotos {
      * @returns A tuple containing the plain records as returned by the backend and the expected number of assets within the album
      */
     async fetchAllPictureRecordsForZone(zone: QueryBuilder.Zones, parentId?: string): Promise<[any[], number]> {
+        const startedAt = Date.now();
         // Getting number of items in folder
         const expectedNumberOfRecords = await this.getPictureRecordsCountForZone(zone, parentId);
 
@@ -641,9 +685,12 @@ export class iCloudPhotos {
         const numberOfRequests = this.getPictureRecordsRequestCountForZone(zone, expectedNumberOfRecords, parentId);
         const allRecords: any[] = [];
         for (let index = 0; index < numberOfRequests; index++) {
+            Resources.logger(this).info(`Fetching iCloud photo metadata page ${index + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library`);
             allRecords.push(...await this.fetchPictureRecordsPageForZone(zone, index, parentId));
+            Resources.logger(this).info(`Fetched iCloud photo metadata page ${index + 1}/${numberOfRequests} for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library (${allRecords.length} raw records accumulated)`);
         }
 
+        Resources.logger(this).info(`Fetched ${allRecords.length} raw iCloud photo metadata records for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library in ${Date.now() - startedAt}ms`);
         return [allRecords, expectedNumberOfRecords];
     }
 
@@ -655,7 +702,8 @@ export class iCloudPhotos {
      * @emits iCPSEventRuntimeWarning.COUNT_MISMATCH - In case the number of fetched records does not match the expected number of records -  provides the album id, number of expected assets, actual CPL Assets and actual CPL Masters
      */
     async fetchAllCPLAssetsMasters(parentId?: string): Promise<[CPLAsset[], CPLMaster[]]> {
-        Resources.logger(this).debug(`Fetching all picture records for album ${parentId === undefined ? `All photos` : parentId}`);
+        const startedAt = Date.now();
+        Resources.logger(this).info(`Fetching all picture records for album ${parentId === undefined ? `All photos` : parentId}`);
 
         let expectedNumberOfRecords = -1;
         let allRecords: any[] = [];
@@ -666,7 +714,7 @@ export class iCloudPhotos {
 
             // Merging assets of shared library, if available
             if (Resources.manager().sharedZoneAvailable && typeof parentId === `undefined`) { // Only fetch shared album records if no parentId is specified, since icloud api does not yet support shared records in albums
-                Resources.logger(this).debug(`Fetching all picture records for album ${parentId === undefined ? `All photos` : parentId} for shared zone`);
+                Resources.logger(this).info(`Fetching all picture records for album ${parentId === undefined ? `All photos` : parentId} for shared zone`);
                 const [sharedRecords, sharedExpectedCount] = await this.fetchAllPictureRecordsForZone(QueryBuilder.Zones.Shared);
                 allRecords = [...allRecords, ...sharedRecords];
                 expectedNumberOfRecords += sharedExpectedCount;
@@ -720,6 +768,7 @@ export class iCloudPhotos {
             Resources.logger(this).debug(`Received expected amount (${expectedNumberOfRecords}) of records for album ${parentId === undefined ? `'All photos'` : parentId}`);
         }
 
+        Resources.logger(this).info(`Parsed ${cplAssets.length} CPLAsset and ${cplMasters.length} CPLMaster records for album ${parentId === undefined ? `All photos` : parentId} in ${Date.now() - startedAt}ms`);
         return [cplAssets, cplMasters];
     }
 

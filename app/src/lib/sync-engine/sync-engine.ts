@@ -298,17 +298,34 @@ export class SyncEngine {
      * @emits iCPSEventSyncEngine.FETCH_N_LOAD_COMPLETED - When the fetch & load is done - The first argument is the amount of remote assets, the second argument is the amount of remote albums, the third argument is the amount of local assets, the fourth argument is the amount of local albums
      */
     async fetchAndLoadState(): Promise<[Asset[], Album[], PLibraryEntities<Asset>, PLibraryEntities<Album>]> {
+        const startedAt = Date.now();
         Resources.emit(iCPSEventSyncEngine.FETCH_N_LOAD);
-        const [remoteAssets, remoteAlbums, localAssets, localAlbums] = await Promise.all([
-            this.icloud.photos.fetchAllCPLAssetsMasters()
-                .then(([cplAssets, cplMasters]) => SyncEngineHelper.convertCPLAssets(cplAssets, cplMasters)),
-            this.icloud.photos.fetchAllCPLAlbums()
-                .then(cplAlbums => SyncEngineHelper.convertCPLAlbums(cplAlbums)),
+        Resources.logger(this).info(`Starting remote iCloud and local library state load`);
+        const localState = Promise.all([
             this.photosLibrary.loadAssets(),
             this.photosLibrary.loadAlbums(),
         ]);
 
+        const remoteAssetStartedAt = Date.now();
+        Resources.logger(this).info(`Fetching remote iCloud asset metadata`);
+        const [cplAssets, cplMasters] = await this.icloud.photos.fetchAllCPLAssetsMasters();
+        Resources.logger(this).info(`Fetched remote iCloud asset metadata in ${Date.now() - remoteAssetStartedAt}ms; converting ${cplAssets.length} assets and ${cplMasters.length} masters`);
+        const remoteAssets = SyncEngineHelper.convertCPLAssets(cplAssets, cplMasters);
+        Resources.logger(this).info(`Converted ${remoteAssets.length} remote iCloud assets`);
+
+        const remoteAlbumStartedAt = Date.now();
+        Resources.logger(this).info(`Fetching remote iCloud album metadata`);
+        const cplAlbums = await this.icloud.photos.fetchAllCPLAlbums();
+        Resources.logger(this).info(`Fetched remote iCloud album metadata in ${Date.now() - remoteAlbumStartedAt}ms; converting ${cplAlbums.length} albums`);
+        const remoteAlbums = SyncEngineHelper.convertCPLAlbums(cplAlbums);
+        Resources.logger(this).info(`Converted ${remoteAlbums.length} remote iCloud albums`);
+
+        Resources.logger(this).info(`Waiting for local Photos library state load`);
+        const [localAssets, localAlbums] = await localState;
+        Resources.logger(this).info(`Loaded local Photos library state with ${Object.keys(localAssets).length} assets and ${Object.keys(localAlbums).length} albums`);
+
         Resources.emit(iCPSEventSyncEngine.FETCH_N_LOAD_COMPLETED, remoteAssets.length, remoteAlbums.length, Object.keys(localAssets).length, Object.keys(localAlbums).length);
+        Resources.logger(this).info(`Completed remote iCloud and local library state load in ${Date.now() - startedAt}ms`);
         return [remoteAssets, remoteAlbums, localAssets, localAlbums];
     }
 
