@@ -44,9 +44,12 @@ describe(`Setup iCloud Photos`, () => {
     const setupSharedURL = `${Config.photosDomain}/database/1/com.apple.photos.cloud/production/shared/changes/database`;
 
     test(`Success`, async () => {
-        photos.ready = Promise.resolve();
+        photos.checkingIndexingStatus = jest.fn<typeof photos.checkingIndexingStatus>()
+            .mockImplementation(async () => {
+                mockedEventManager.emit(iCPSEventPhotos.READY);
+            });
 
-        const setupCompletedEvent = mockedEventManager.spyOnEvent(iCPSEventPhotos.SETUP_COMPLETED);
+        const setupCompletedEvent = mockedEventManager.spyOnEvent(iCPSEventPhotos.SETUP_COMPLETED, false);
 
         mockedValidator.validatePhotosSetupResponse = jest.fn<typeof mockedValidator.validatePhotosSetupResponse>()
             .mockReturnValue({
@@ -70,6 +73,39 @@ describe(`Setup iCloud Photos`, () => {
         expect((mockedNetworkManager.mock.history.post[0].headers as any).Cookie).toBe(iCloudCookieRequestHeader);
 
         expect(setupCompletedEvent).toHaveBeenCalledTimes(1);
+    });
+
+    test(`Refreshes readiness on every setup attempt`, async () => {
+        const firstSetupCompletedEvent = mockedEventManager.spyOnEvent(iCPSEventPhotos.SETUP_COMPLETED, false);
+        photos.checkingIndexingStatus = jest.fn<typeof photos.checkingIndexingStatus>()
+            .mockImplementation(async () => {
+                mockedEventManager.emit(iCPSEventPhotos.READY);
+            });
+
+        mockedValidator.validatePhotosSetupResponse = jest.fn<typeof mockedValidator.validatePhotosSetupResponse>()
+            .mockReturnValue({
+                data: {
+                    zones: []
+                } as Partial<PhotosSetupResponse[`data`]> as PhotosSetupResponse[`data`],
+            } as Partial<PhotosSetupResponse> as PhotosSetupResponse);
+        mockedNetworkManager.applyZones = jest.fn<typeof mockedNetworkManager.applyZones>();
+
+        mockedNetworkManager.mock
+            .onPost(setupPrivateURL, {})
+            .reply(200);
+        mockedNetworkManager.mock
+            .onPost(setupSharedURL, {})
+            .reply(200);
+
+        await photos.setup();
+        expect(firstSetupCompletedEvent).toHaveBeenCalledTimes(1);
+
+        photos.checkingIndexingStatus = jest.fn<typeof photos.checkingIndexingStatus>()
+            .mockImplementation(async () => {
+                mockedEventManager.emit(iCPSEventPhotos.ERROR, new Error(`retry setup failed`));
+            });
+
+        await expect(photos.setup()).rejects.toThrow(/^retry setup failed$/);
     });
 
     test(`Response validation fails`, async () => {

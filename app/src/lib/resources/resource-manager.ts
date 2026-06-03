@@ -12,7 +12,7 @@ import { PushSubscription } from "./web-server-types.js";
 import webpush from 'web-push'
 import {LogLevel} from "./state-manager.js";
 
-export type AppleCredentials = {
+type AppleCredentials = {
     username: string,
     password: string
 }

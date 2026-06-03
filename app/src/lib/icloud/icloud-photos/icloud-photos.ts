@@ -64,6 +64,8 @@ export class iCloudPhotos {
      * @emits iCPSEventPhotos.ERROR - In case of an error during setup - The iCPSError is provided as argument
      */
     async setup() {
+        this.ready = this.getReady();
+
         try {
             Resources.logger(this).debug(`Getting iCloud Photos account information`);
 
