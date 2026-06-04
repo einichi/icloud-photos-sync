@@ -251,6 +251,10 @@ export enum iCPSEventSyncEngine {
      */
     WRITE_ASSETS = `sync-write_assets`,
     /**
+     * Emitted when the write process starts downloading an asset - provides the asset name as argument
+     */
+    WRITE_ASSET_STARTED = `sync-write_asset_started`,
+    /**
      * Emitted when the write process has completed writing an asset - provides the asset name as argument
      */
     WRITE_ASSET_COMPLETED = `sync-write_asset_completed`,

@@ -54,3 +54,7 @@ export const NO_SHARED_ZONE: ErrorStruct = buildErrorStruct(
 export const NO_CREDENTIALS: ErrorStruct = buildErrorStruct(
     name, prefix, `NO_CREDENTIALS`, `Apple ID credentials have not been provided`,
 );
+
+export const DOWNLOAD_TIMEOUT: ErrorStruct = buildErrorStruct(
+    name, prefix, `DOWNLOAD_TIMEOUT`, `Asset download timed out`,
+);

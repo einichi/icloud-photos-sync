@@ -101,10 +101,12 @@ export class StateManager {
      */
     inProgressAssets: {
         totalAssets: number,
-        completedAssets: number
+        completedAssets: number,
+        activeAssetNames: string[]
     } = {
             totalAssets: 0,
-            completedAssets: 0
+            completedAssets: 0,
+            activeAssetNames: []
         }
 
     trustedPhoneNumbers?: TrustedPhoneNumber[] 
@@ -216,16 +218,24 @@ export class StateManager {
                 this.updateState(StateType.RUNNING, {progressMsg: `Syncing assets: 0/${toBeAddedCount}`, progress: 25});
                 this.inProgressAssets = {
                     totalAssets: toBeAddedCount,
-                    completedAssets: 0
+                    completedAssets: 0,
+                    activeAssetNames: []
                 }
+            })
+            .on(iCPSEventSyncEngine.WRITE_ASSET_STARTED, (assetName?: string) => {
+                this.addActiveAsset(assetName);
+                this.updateAssetProgress(this.getCurrentActiveAssetName(), true);
             })
             .on(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, (assetName?: string) => {
                 this.inProgressAssets.completedAssets++
-                this.updateAssetProgress(assetName);
+                this.removeActiveAsset(assetName);
+                this.updateAssetProgress(this.getCurrentActiveAssetName());
             })
             .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, (_err?: Error, asset?: Asset) => {
+                const assetName = this.getAssetDisplayName(asset);
                 this.inProgressAssets.completedAssets++
-                this.updateAssetProgress(this.getAssetDisplayName(asset));
+                this.removeActiveAsset(assetName);
+                this.updateAssetProgress(this.getCurrentActiveAssetName());
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED, () => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Asset sync completed!`, progress: 90});
@@ -292,7 +302,7 @@ export class StateManager {
                 this.addLog(LogLevel.WARN, `RuntimeWarning`, `Error while loading iCloud asset ${asset.recordName}: ${iCPSError.toiCPSError(err).getDescription()}`);
             })
             .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, (err: Error, asset: Asset) => {
-                this.addLog(LogLevel.WARN, `RuntimeWarning`, `Error while writing asset ${asset?.getDisplayName()}: ${iCPSError.toiCPSError(err).getDescription()}`);
+                this.addLog(LogLevel.WARN, `RuntimeWarning`, `Error while writing asset ${this.getAssetDisplayName(asset)}: ${iCPSError.toiCPSError(err).getDescription()}`);
             })
             .on(iCPSEventRuntimeWarning.WRITE_ALBUM_ERROR, (err: Error, album: Album) => {
                 this.addLog(LogLevel.WARN, `RuntimeWarning`, `Error while writing album ${album?.getDisplayName()}: ${iCPSError.toiCPSError(err).getDescription()}`);
@@ -360,9 +370,10 @@ export class StateManager {
     /**
      * Updates the asset progress UI state, throttling high-volume syncs to avoid flooding the Web UI.
      * @param assetName - The current asset display name
+     * @param force - True if this progress update should be published even when progress counts are throttled
      */
-    private updateAssetProgress(assetName?: string) {
-        if (!this.shouldPublishAssetProgress()) {
+    private updateAssetProgress(assetName?: string, force: boolean = false) {
+        if (!force && !this.shouldPublishAssetProgress()) {
             return;
         }
 
@@ -374,6 +385,41 @@ export class StateManager {
             progressDetail: assetName,
             progress: 25 + (inProgressPercentage * 65)
         });
+    }
+
+    /**
+     * Marks an asset as actively downloading.
+     * @param assetName - The asset display name
+     */
+    private addActiveAsset(assetName?: string) {
+        if (!assetName) {
+            return;
+        }
+
+        this.inProgressAssets.activeAssetNames.push(assetName);
+    }
+
+    /**
+     * Removes one completed or failed asset from the active download list.
+     * @param assetName - The asset display name
+     */
+    private removeActiveAsset(assetName?: string) {
+        if (!assetName) {
+            return;
+        }
+
+        const activeIndex = this.inProgressAssets.activeAssetNames.lastIndexOf(assetName);
+        if (activeIndex >= 0) {
+            this.inProgressAssets.activeAssetNames.splice(activeIndex, 1);
+        }
+    }
+
+    /**
+     * Gets the most recently started asset that is still actively downloading.
+     * @returns The current active asset name, if any
+     */
+    private getCurrentActiveAssetName(): string | undefined {
+        return this.inProgressAssets.activeAssetNames[this.inProgressAssets.activeAssetNames.length - 1];
     }
 
     /**
@@ -434,7 +480,8 @@ export class StateManager {
         this.log = []
         this.inProgressAssets = {
             totalAssets: 0,
-            completedAssets: 0
+            completedAssets: 0,
+            activeAssetNames: []
         }
         this.updateState(StateType.RUNNING, {progress: 0, progressMsg: `Starting ${trigger}...`})
     }

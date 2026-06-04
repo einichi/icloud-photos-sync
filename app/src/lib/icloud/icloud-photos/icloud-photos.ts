@@ -864,16 +864,17 @@ export class iCloudPhotos {
      */
     async downloadAsset(asset: Asset): Promise<void> {
         const location = asset.getAssetFilePath();
+        const displayName = this.getAssetDownloadDisplayName(asset);
         try {
-            await Resources.network().downloadData(asset.downloadURL, location);
+            await Resources.network().downloadData(asset.downloadURL, location, displayName);
         } catch (err) {
             if (!this.isExpiredDownloadURLError(err)) {
                 throw err;
             }
 
-            Resources.logger(this).debug(`iCloud download URL expired for ${this.getAssetDownloadDisplayName(asset)}, refreshing URL and retrying`);
+            Resources.logger(this).debug(`iCloud download URL expired for ${displayName}, refreshing URL and retrying`);
             await this.refreshAssetDownloadURL(asset);
-            await Resources.network().downloadData(asset.downloadURL, location);
+            await Resources.network().downloadData(asset.downloadURL, location, displayName);
         }
 
         await fs.utimes(location, new Date(asset.modified), new Date(asset.modified)); // Setting modified date on file

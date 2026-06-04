@@ -422,16 +422,19 @@ export class SyncEngine {
      * Downloads and stores a given asset, unless file is already present on disk
      * @param asset - The asset that needs to be downloaded
      * @returns A promise that resolves, once the file has been successfully written to disk
+     * @emits iCPSEventSyncEngine.WRITE_ASSET_STARTED - When the asset download starts - The first argument is the name of the asset
      * @emits iCPSEventSyncEngine.WRITE_ASSET_COMPLETED - When the asset has been written to disk - The first argument is the name of the asset
      * @emits iCPSEventRuntimeWarning.WRITE_ASSET_ERROR - When an error occurs while writing the asset to disk - The first argument is the error, the second argument is the asset
      */
     async addAsset(asset: Asset) {
         try {
+            const assetProgressDisplayName = this.getAssetProgressDisplayName(asset);
             if (await this.hasValidLocalAsset(asset)) {
-                Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, this.getAssetProgressDisplayName(asset));
+                Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, assetProgressDisplayName);
                 return;
             }
 
+            Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_STARTED, assetProgressDisplayName);
             await this.icloud.photos.downloadAsset(asset);
             await asset.verify();
         } catch (err) {

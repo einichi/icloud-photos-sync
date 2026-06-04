@@ -3,6 +3,7 @@ import {AxiosHarTracker} from "axios-har-tracker";
 import {createWriteStream} from "fs";
 import fs from "fs/promises";
 import {jsonc} from "jsonc";
+import path from "path";
 import {pEvent} from "p-event";
 import PQueue from "p-queue";
 import {Cookie} from "tough-cookie";
@@ -218,6 +219,11 @@ export class NetworkManager {
     _streamingCCYLimiter: PQueue;
 
     /**
+     * Timeout applied to an active streaming download task.
+     */
+    _downloadTimeoutMs?: number;
+
+    /**
      * Collection of header values and cookies that are applied based on the request
      */
     _headerJar: HeaderJar;
@@ -252,8 +258,8 @@ export class NetworkManager {
 
         this._streamingCCYLimiter = new PQueue({
             concurrency: resources.downloadThreads,
-            timeout: resources.downloadTimeout === Infinity ? undefined : (1000 * 60 * resources.downloadTimeout),
         });
+        this._downloadTimeoutMs = resources.downloadTimeout === Infinity ? undefined : (1000 * 60 * resources.downloadTimeout);
 
         this._streamingAxios = axios.create({
             responseType: `stream`,
@@ -497,26 +503,105 @@ export class NetworkManager {
      * Uses the CCY limiter to ensure that the network is not overwhelmed
      * @param url - The url to download
      * @param location - The location to write the file to (existing files will be overwritten)
+     * @param displayName - Optional human-readable name for diagnostics
      * @returns A promise, that resolves once the download has been completed, or rejects if the download was not successful.
      */
-    async downloadData(url: string, location: string): Promise<void> {
+    async downloadData(url: string, location: string, displayName?: string): Promise<void> {
         await this._streamingCCYLimiter.add(async () => {
-            const locationExists = await fs.stat(location)
-                .then(() => true)
-                .catch(() => false);
+            const downloadStartedAt = Date.now();
+            let stage = `checking destination file`;
+            await this.runDownloadWithTimeout(async signal => {
+                const locationExists = await fs.stat(location)
+                    .then(() => true)
+                    .catch(() => false);
 
-            if (locationExists) {
-                Resources.logger(this).debug(`File ${location} already exists - skipping download`);
-                return;
-            }
+                if (locationExists) {
+                    Resources.logger(this).debug(`File ${location} already exists - skipping download`);
+                    return;
+                }
 
-            Resources.logger(this).debug(`Starting download of ${url}`);
-            const response = await this._streamingAxios.get(url);
-            Resources.logger(this).debug(`Starting to write ${url} to ${location}`);
-            const writeStream = createWriteStream(location, {flags: `w`});
-            response.data.pipe(writeStream);
-            await pEvent(writeStream, `finish`, {rejectionEvents: [`error`]});
-            Resources.logger(this).debug(`Finished download of ${url}`);
+                stage = `requesting response stream from iCloud`;
+                Resources.logger(this).debug(`Starting download for ${displayName ?? path.basename(location)}`);
+                const response = await this._streamingAxios.get(url, {signal});
+
+                stage = `writing response stream to disk`;
+                Resources.logger(this).debug(`Starting to write ${displayName ?? path.basename(location)} to ${location}`);
+                const writeStream = createWriteStream(location, {flags: `w`});
+                const abortError = new Error(`Download aborted after timeout`);
+                const abortHandler = () => {
+                    response.data.destroy(abortError);
+                    writeStream.destroy(abortError);
+                };
+
+                signal.addEventListener(`abort`, abortHandler, {once: true});
+                try {
+                    response.data.pipe(writeStream);
+                    await pEvent(writeStream, `finish`, {rejectionEvents: [`error`]});
+                } finally {
+                    signal.removeEventListener(`abort`, abortHandler);
+                }
+
+                Resources.logger(this).debug(`Finished download for ${displayName ?? path.basename(location)}`);
+            }, () => ({
+                displayName,
+                destination: path.basename(location),
+                stage,
+                elapsedMs: Date.now() - downloadStartedAt,
+            }));
         });
     }
+
+    /**
+     * Runs an active download with a stage-aware timeout.
+     * @param task - The download task to execute
+     * @param getContext - Callback returning current download context
+     */
+    private async runDownloadWithTimeout(task: (signal: AbortSignal) => Promise<void>, getContext: () => DownloadTimeoutContext): Promise<void> {
+        if (this._downloadTimeoutMs === undefined) {
+            await task(new AbortController().signal);
+            return;
+        }
+
+        const abortController = new AbortController();
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        const taskPromise = task(abortController.signal);
+        taskPromise.catch(() => undefined);
+
+        const timeoutPromise = new Promise<never>((_resolve, reject) => {
+            timeoutHandle = setTimeout(() => {
+                abortController.abort();
+                reject(this.buildDownloadTimeoutError(getContext()));
+            }, this._downloadTimeoutMs);
+        });
+
+        try {
+            await Promise.race([taskPromise, timeoutPromise]);
+        } finally {
+            if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+            }
+        }
+    }
+
+    /**
+     * Builds a diagnostic timeout error without exposing the signed download URL.
+     * @param context - Current download context
+     * @returns A timeout error with stage and queue details
+     */
+    private buildDownloadTimeoutError(context: DownloadTimeoutContext): iCPSError {
+        const timeoutMs = this._downloadTimeoutMs ?? 0;
+        return new iCPSError(RESOURCES_ERR.DOWNLOAD_TIMEOUT)
+            .addMessage(context.displayName ?? context.destination)
+            .addMessage(`timed out after ${timeoutMs}ms while ${context.stage}`)
+            .addMessage(`elapsed ${context.elapsedMs}ms`)
+            .addMessage(`destination ${context.destination}`)
+            .addMessage(`download workers running ${this._streamingCCYLimiter.pending}, waiting ${this._streamingCCYLimiter.size}`);
+    }
+}
+
+type DownloadTimeoutContext = {
+    displayName?: string,
+    destination: string,
+    stage: string,
+    elapsedMs: number
 }
