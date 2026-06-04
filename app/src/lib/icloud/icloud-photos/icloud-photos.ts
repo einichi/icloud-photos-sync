@@ -4,7 +4,7 @@ import {jsonc} from 'jsonc';
 import {ICLOUD_PHOTOS_ERR} from '../../../app/error/error-codes.js';
 import {iCPSError} from '../../../app/error/error.js';
 import {AlbumAssets, AlbumType} from '../../photos-library/model/album.js';
-import {Asset} from '../../photos-library/model/asset.js';
+import {Asset, AssetType} from '../../photos-library/model/asset.js';
 import {iCPSEventPhotos, iCPSEventRuntimeWarning} from '../../resources/events-types.js';
 import {Resources} from '../../resources/main.js';
 import {ENDPOINTS, PhotosSetupResponseZone} from '../../resources/network-types.js';
@@ -25,6 +25,7 @@ const RECORD_CHANGE_TAG = `21h2`;
 const MAX_RECORDS_LIMIT = 200;
 const PHOTO_METADATA_PAGE_CONCURRENCY = 4;
 const PHOTOS_METADATA_REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
+const EXPIRED_DOWNLOAD_URL_STATUS = 410;
 
 type PhotosQueryPage = {
     records: any[],
@@ -403,6 +404,47 @@ export class iCloudPhotos {
             recordsReturned: Array.isArray(data?.records) ? data.records.length : undefined,
             continuationReturned: typeof data?.continuationMarker === `string` && data.continuationMarker.length > 0,
         };
+    }
+
+    /**
+     * Looks up records by record name in the iCloud Photos backend.
+     * @param zone - Defines the zone to be used
+     * @param recordNames - Record names to look up
+     * @param desiredKeys - Optional desired fields to reduce the lookup response
+     * @returns The records returned by the backend
+     */
+    async performLookup(zone: QueryBuilder.Zones, recordNames: string[], desiredKeys?: string[]): Promise<any[]> {
+        const config: AxiosRequestConfig = {
+            params: {
+                remapEnums: `True`,
+            },
+        };
+
+        const zoneId = QueryBuilder.getZoneID(zone);
+        const data: any = {
+            records: recordNames.map(recordName => ({recordName})),
+            zoneID: {
+                zoneName: zoneId.zoneName,
+                zoneType: zoneId.zoneType,
+                ownerRecordName: zoneId.ownerRecordName,
+            },
+        };
+
+        if (desiredKeys) {
+            data.desiredKeys = desiredKeys;
+        }
+
+        const startedAt = Date.now();
+        Resources.logger(this).debug(`Looking up ${recordNames.length} iCloud Photos record(s) in ${zone} library`);
+        const lookupResponse = await Resources.network().post(ENDPOINTS.PHOTOS.AREAS[zoneId.area] + ENDPOINTS.PHOTOS.PATH.LOOKUP, data, config);
+        const fetchedRecords = lookupResponse?.data?.records;
+        if (!fetchedRecords || !Array.isArray(fetchedRecords)) {
+            throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
+                .addContext(`lookupResponse`, lookupResponse);
+        }
+
+        Resources.logger(this).debug(`Looked up ${fetchedRecords.length} iCloud Photos record(s) in ${Date.now() - startedAt}ms`);
+        return fetchedRecords;
     }
 
     /**
@@ -822,8 +864,114 @@ export class iCloudPhotos {
      */
     async downloadAsset(asset: Asset): Promise<void> {
         const location = asset.getAssetFilePath();
-        await Resources.network().downloadData(asset.downloadURL, location);
+        try {
+            await Resources.network().downloadData(asset.downloadURL, location);
+        } catch (err) {
+            if (!this.isExpiredDownloadURLError(err)) {
+                throw err;
+            }
+
+            Resources.logger(this).debug(`iCloud download URL expired for ${this.getAssetDownloadDisplayName(asset)}, refreshing URL and retrying`);
+            await this.refreshAssetDownloadURL(asset);
+            await Resources.network().downloadData(asset.downloadURL, location);
+        }
+
         await fs.utimes(location, new Date(asset.modified), new Date(asset.modified)); // Setting modified date on file
+    }
+
+    /**
+     * Gets a human-facing asset name for download diagnostics.
+     * @param asset - The asset being downloaded
+     * @returns A filename suitable for logs
+     */
+    private getAssetDownloadDisplayName(asset: Asset): string {
+        if (asset.origFilename) {
+            return asset.getPrettyFilename();
+        }
+
+        return asset.getAssetFilename();
+    }
+
+    /**
+     * Detects iCloud's response for an expired signed asset download URL.
+     * @param err - Error thrown by the download request
+     * @returns True if the request failed because the download URL expired
+     */
+    private isExpiredDownloadURLError(err: unknown): boolean {
+        const axiosError = err as AxiosError | undefined;
+        return Boolean((axiosError?.isAxiosError || axiosError?.name === `AxiosError`)
+            && axiosError?.response?.status === EXPIRED_DOWNLOAD_URL_STATUS);
+    }
+
+    /**
+     * Refreshes the signed download URL on an asset by looking up its current CloudKit record.
+     * @param asset - The asset whose URL should be refreshed
+     */
+    private async refreshAssetDownloadURL(asset: Asset): Promise<void> {
+        try {
+            const downloadRecordName = asset.downloadRecordName ?? asset.recordName;
+            if (!downloadRecordName) {
+                throw new iCPSError(ICLOUD_PHOTOS_ERR.DOWNLOAD_URL_REFRESH)
+                    .addMessage(`missing download record name`);
+            }
+
+            const [record] = await this.performLookup(asset.zone, [downloadRecordName], QueryBuilder.QUERY_KEYS);
+            if (!record) {
+                throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
+                    .addMessage(`no record returned for ${downloadRecordName}`);
+            }
+
+            await this.applyDownloadURLFromRecord(asset, record);
+        } catch (err) {
+            throw new iCPSError(ICLOUD_PHOTOS_ERR.DOWNLOAD_URL_REFRESH)
+                .addMessage(asset.getDisplayName())
+                .addCause(err);
+        }
+    }
+
+    /**
+     * Applies a refreshed download URL from a looked-up CPLMaster or CPLAsset record.
+     * @param asset - The asset being refreshed
+     * @param record - The CloudKit record returned by lookup
+     */
+    private async applyDownloadURLFromRecord(asset: Asset, record: any): Promise<void> {
+        if (record.recordType === QueryBuilder.RECORD_TYPES.PHOTO_MASTER_RECORD) {
+            const master = CPLMaster.parseFromQuery(record);
+            asset.downloadURL = master.resource.downloadURL;
+            return;
+        }
+
+        if (record.recordType === QueryBuilder.RECORD_TYPES.PHOTO_ASSET_RECORD && asset.assetType === AssetType.ORIG) {
+            const masterRecordName = record.fields?.masterRef?.value?.recordName;
+            if (!masterRecordName) {
+                throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
+                    .addMessage(`CPLAsset lookup did not include masterRef`);
+            }
+
+            asset.downloadRecordName = masterRecordName;
+            const [masterRecord] = await this.performLookup(asset.zone, [masterRecordName], QueryBuilder.QUERY_KEYS);
+            if (!masterRecord) {
+                throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
+                    .addMessage(`no master record returned for ${masterRecordName}`);
+            }
+
+            await this.applyDownloadURLFromRecord(asset, masterRecord);
+            return;
+        }
+
+        if (record.recordType === QueryBuilder.RECORD_TYPES.PHOTO_ASSET_RECORD) {
+            const cplAsset = CPLAsset.parseFromQuery(record);
+            if (!cplAsset.resource?.downloadURL) {
+                throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
+                    .addMessage(`CPLAsset lookup did not include a downloadable resource`);
+            }
+
+            asset.downloadURL = cplAsset.resource.downloadURL;
+            return;
+        }
+
+        throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
+            .addMessage(`unexpected record type ${record.recordType}`);
     }
 
     /**

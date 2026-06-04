@@ -292,7 +292,7 @@ export class StateManager {
                 this.addLog(LogLevel.WARN, `RuntimeWarning`, `Error while loading iCloud asset ${asset.recordName}: ${iCPSError.toiCPSError(err).getDescription()}`);
             })
             .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, (err: Error, asset: Asset) => {
-                this.addLog(LogLevel.WARN, `RuntimeWarning`, `Error while verifying asset ${asset?.getDisplayName()}: ${iCPSError.toiCPSError(err).getDescription()}`);
+                this.addLog(LogLevel.WARN, `RuntimeWarning`, `Error while writing asset ${asset?.getDisplayName()}: ${iCPSError.toiCPSError(err).getDescription()}`);
             })
             .on(iCPSEventRuntimeWarning.WRITE_ALBUM_ERROR, (err: Error, album: Album) => {
                 this.addLog(LogLevel.WARN, `RuntimeWarning`, `Error while writing album ${album?.getDisplayName()}: ${iCPSError.toiCPSError(err).getDescription()}`);

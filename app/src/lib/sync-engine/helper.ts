@@ -59,11 +59,11 @@ function convertCPLAssets(cplAssets: CPLAsset[], cplMasters: CPLMaster[]): Asset
             const origExt = parsedOrigFilename.ext;
 
             if (master?.resource && master?.resourceType) {
-                remoteAssets.push(Asset.fromCPL(master.resource, master.resourceType, origExt, master.modified, origFilename, AssetType.ORIG, asset.recordName, asset.favorite, master.zoneName));
+                remoteAssets.push(Asset.fromCPL(master.resource, master.resourceType, origExt, master.modified, origFilename, AssetType.ORIG, asset.recordName, asset.favorite, master.zoneName, master.recordName));
             }
 
             if (asset?.resource && asset?.resourceType) {
-                remoteAssets.push(Asset.fromCPL(asset.resource, asset.resourceType, origExt, asset.modified, origFilename, AssetType.EDIT, asset.recordName, asset.favorite, asset.zoneName));
+                remoteAssets.push(Asset.fromCPL(asset.resource, asset.resourceType, origExt, asset.modified, origFilename, AssetType.EDIT, asset.recordName, asset.favorite, asset.zoneName, asset.recordName));
             }
         } catch (err) {
             if (err instanceof iCPSError && err.code === LIBRARY_ERR.UNKNOWN_FILETYPE_DESCRIPTOR.code) {

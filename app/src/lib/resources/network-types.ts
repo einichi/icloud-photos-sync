@@ -110,6 +110,7 @@ export const ENDPOINTS = {
         },
         PATH: {
             QUERY: `/records/query`,
+            LOOKUP: `/records/lookup`,
             MODIFY: `/records/modify`,
             ZONES: `/changes/database`,
         },

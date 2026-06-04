@@ -161,7 +161,7 @@ export enum iCPSEventRuntimeWarning {
      */
     ICLOUD_LOAD_ERROR = `warn-icloud_load_error`,
     /**
-     * Emitted when the write process has experienced an error while verifying a written asset - provides the error and asset as argument
+     * Emitted when the write process has experienced an error while writing an asset - provides the error and asset as argument
      */
     WRITE_ASSET_ERROR = `warn-write_asset_error`,
     /**

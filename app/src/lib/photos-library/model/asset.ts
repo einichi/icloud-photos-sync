@@ -74,6 +74,10 @@ export class Asset implements PEntity<Asset> {
      */
     downloadURL?: string;
     /**
+     * The record containing the downloadable resource. For originals this is the CPLMaster, while recordName remains the CPLAsset.
+     */
+    downloadRecordName?: string;
+    /**
      * Record name of the associated CPL Asset
      */
     recordName?: string;
@@ -95,7 +99,7 @@ export class Asset implements PEntity<Asset> {
      * @param referenceChecksum -
      * @param downloadURL -
      */
-    constructor(fileChecksum: string, size: number, fileType: FileType, modified: number, zone: Zones, assetType?: AssetType, origFilename?: string, wrappingKey?: string, referenceChecksum?: string, downloadURL?: string, recordName?: string, isFavorite?: boolean) {
+    constructor(fileChecksum: string, size: number, fileType: FileType, modified: number, zone: Zones, assetType?: AssetType, origFilename?: string, wrappingKey?: string, referenceChecksum?: string, downloadURL?: string, recordName?: string, isFavorite?: boolean, downloadRecordName?: string) {
         this.fileChecksum = fileChecksum;
         this.size = size;
         this.fileType = fileType;
@@ -108,6 +112,7 @@ export class Asset implements PEntity<Asset> {
         this.downloadURL = downloadURL;
         this.recordName = recordName;
         this.isFavorite = isFavorite;
+        this.downloadRecordName = downloadRecordName;
     }
 
     /**
@@ -122,7 +127,7 @@ export class Asset implements PEntity<Asset> {
      * @returns An Asset based on the backend objects
      * @throws An iCPSError, if the asset file descriptor is not supported
      */
-    static fromCPL(asset: AssetID, fileTypeDescriptor: string, fileTypeExt: string, modified: number, origFilename: string, assetType: AssetType, recordName: string, isFavorite: number, zone: string): Asset {
+    static fromCPL(asset: AssetID, fileTypeDescriptor: string, fileTypeExt: string, modified: number, origFilename: string, assetType: AssetType, recordName: string, isFavorite: number, zone: string, downloadRecordName?: string): Asset {
         return new Asset(
             asset.fileChecksum,
             asset.size,
@@ -136,6 +141,7 @@ export class Asset implements PEntity<Asset> {
             asset.downloadURL,
             recordName,
             isFavorite === 1,
+            downloadRecordName,
         );
     }
 

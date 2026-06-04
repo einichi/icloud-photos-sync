@@ -27,6 +27,10 @@ export const UNEXPECTED_QUERY_RESPONSE: ErrorStruct = buildErrorStruct(
     name, prefix, `UNEXPECTED_QUERY_RESPONSE`, `Received unexpected query response format`,
 );
 
+export const UNEXPECTED_LOOKUP_RESPONSE: ErrorStruct = buildErrorStruct(
+    name, prefix, `UNEXPECTED_LOOKUP_RESPONSE`, `Received unexpected lookup response format`,
+);
+
 export const UNEXPECTED_OPERATIONS_RESPONSE: ErrorStruct = buildErrorStruct(
     name, prefix, `UNEXPECTED_OPERATIONS_RESPONSE`, `Received unexpected operations response format`,
 );
@@ -69,4 +73,8 @@ export const COUNT_DATA: ErrorStruct = buildErrorStruct(
 
 export const FETCH_RECORDS: ErrorStruct = buildErrorStruct(
     name, prefix, `FETCH_RECORDS`, `Unable to fetch records`,
+);
+
+export const DOWNLOAD_URL_REFRESH: ErrorStruct = buildErrorStruct(
+    name, prefix, `DOWNLOAD_URL_REFRESH`, `Unable to refresh asset download URL`,
 );
