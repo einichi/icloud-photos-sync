@@ -263,9 +263,29 @@ export class ResourceManager {
             secure: this._resources.smtpSecure,
             user: this._resources.smtpUser,
             password: this._resources.smtpPassword,
-            from: this._resources.smtpFrom,
+            from: this.getSmtpFromAddress(),
             to: recipients,
         };
+    }
+
+    /**
+     * @returns Sender address formatted with optional display name
+     */
+    private getSmtpFromAddress(): string {
+        if (!this._resources.smtpFromName) {
+            return this._resources.smtpFrom!;
+        }
+
+        const escapedName = this._resources.smtpFromName.replace(/["\\]/g, `\\$&`);
+        return `"${escapedName}" <${this.extractEmailAddress(this._resources.smtpFrom!)}>`;
+    }
+
+    /**
+     * @param address - Raw or display-formatted email address
+     * @returns The email address without a display name wrapper
+     */
+    private extractEmailAddress(address: string): string {
+        return address.match(/<([^>]+)>/)?.[1] ?? address.trim();
     }
 
     /**

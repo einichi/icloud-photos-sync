@@ -27,7 +27,7 @@ export const defaultConfig = {
     enableNetworkCapture: false,
     region: `world`,
     legacyLogin: false,
-    trustTokenLifetimeDays: 60,
+    trustTokenLifetimeDays: 30,
     smtpPort: 587,
     smtpSecure: `starttls`,
     smtpTokenExpiryWarningDays: 3,

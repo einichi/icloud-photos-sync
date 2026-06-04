@@ -146,6 +146,7 @@ export type iCPSAppOptions = {
     smtpUser?: string,
     smtpPassword?: string,
     smtpFrom?: string,
+    smtpFromName?: string,
     smtpTo?: string,
     smtpTokenExpiryWarningDays: number,
 }
@@ -252,7 +253,7 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
             .argParser(commanderParseUrl))
         .addOption(new Option(`--trust-token-lifetime-days <number>`, `Number of days a stored trust token is considered valid for expiry display and notifications.`)
             .env(`TRUST_TOKEN_LIFETIME_DAYS`)
-            .default(60)
+            .default(30)
             .argParser(commanderParsePositiveInt))
         .addOption(new Option(`--smtp-host <host>`, `SMTP host for optional notification emails.`)
             .env(`SMTP_HOST`)
@@ -273,6 +274,9 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
             .default(undefined))
         .addOption(new Option(`--smtp-from <email>`, `Sender address for optional notification emails.`)
             .env(`SMTP_FROM`)
+            .default(undefined))
+        .addOption(new Option(`--smtp-from-name <name>`, `Optional display name for the SMTP sender address.`)
+            .env(`SMTP_FROM_NAME`)
             .default(undefined))
         .addOption(new Option(`--smtp-to <email>`, `Recipient address for optional notification emails. Multiple recipients can be comma-separated.`)
             .env(`SMTP_TO`)

@@ -25,10 +25,11 @@ The trust token expiry is estimated from the `trustTokenCreatedAt` timestamp in 
 | `SMTP_SECURE` | `starttls` | no | TLS mode. `starttls` connects plain, requires the server to advertise STARTTLS, then upgrades before authentication/mail. `implicit` opens the connection with TLS immediately. |
 | `SMTP_USER` | unset | no | SMTP username. If both `SMTP_USER` and `SMTP_PASSWORD` are set, `AUTH PLAIN` is used. |
 | `SMTP_PASSWORD` | unset | no | SMTP password. Keep this in environment/secrets management; it is not persisted by ICPS. |
-| `SMTP_FROM` | unset | yes | Sender address, for example `iCloud Photos Sync <photos-sync@example.com>`. |
+| `SMTP_FROM` | unset | yes | Sender address. This can be a bare address such as `photos-sync@example.com`, or a full formatted sender such as `"iCloud Photos Sync" <photos-sync@example.com>`. |
+| `SMTP_FROM_NAME` | unset | no | Optional sender display name. This is easier in Docker Compose than embedding quotes in `SMTP_FROM`; for example `SMTP_FROM=notifications@burg.in` and `SMTP_FROM_NAME=Photo Sync` sends as `"Photo Sync" <notifications@burg.in>`. |
 | `SMTP_TO` | unset | yes | Recipient address. Multiple recipients can be comma-separated. |
 | `SMTP_TOKEN_EXPIRY_WARNING_DAYS` | `3` | no | Start sending daily trust-token expiry warning emails this many days before estimated expiry. |
-| `TRUST_TOKEN_LIFETIME_DAYS` | `60` | no | Number of days a stored trust token is considered valid for Web UI display and notification scheduling. |
+| `TRUST_TOKEN_LIFETIME_DAYS` | `30` | no | Number of days a stored trust token is considered valid for Web UI display and notification scheduling. |
 
 ### Docker Compose Example
 
@@ -43,10 +44,11 @@ services:
       SMTP_SECURE: "starttls"
       SMTP_USER: "photos-sync@example.com"
       SMTP_PASSWORD: "<smtp-password>"
-      SMTP_FROM: "iCloud Photos Sync <photos-sync@example.com>"
+      SMTP_FROM: "photos-sync@example.com"
+      SMTP_FROM_NAME: "iCloud Photos Sync"
       SMTP_TO: "you@example.com"
       SMTP_TOKEN_EXPIRY_WARNING_DAYS: 3
-      TRUST_TOKEN_LIFETIME_DAYS: 60
+      TRUST_TOKEN_LIFETIME_DAYS: 30
 ```
 
 !!! note "Startup authentication reminders"

@@ -30,7 +30,8 @@ The `latest` tag should always represent the latest stable release, whereas the 
               # Optional email notifications. See User Guides > Notifications.
               # SMTP_HOST: "smtp.example.com"
               # SMTP_PORT: 587
-              # SMTP_FROM: "iCloud Photos Sync <photos-sync@example.com>"
+              # SMTP_FROM: "photos-sync@example.com"
+              # SMTP_FROM_NAME: "iCloud Photos Sync"
               # SMTP_TO: "you@example.com"
             ports:
               - 80:80
@@ -133,7 +134,7 @@ The primary interface to interact with this application is a WebUI, however conf
 
 Since this application needs full access to a user's iCloud Photos Library, a full authentication with Apple (including Multi-Factor-Authentication) is initially required. While this will acquire a trust token, Apple's system requires refreshing this token every ~30 days by providing a re-authentication utilizing an MFA code.
 
-The trust token is stored in the `.icloud-photos-sync` resource file together with the timestamp when it was persisted. The Web UI uses that timestamp to show an estimated time until token expiry. The estimate is controlled by `TRUST_TOKEN_LIFETIME_DAYS` and defaults to `60` days.
+The trust token is stored in the `.icloud-photos-sync` resource file together with the timestamp when it was persisted. The Web UI uses that timestamp to show an estimated time until token expiry. The estimate is controlled by `TRUST_TOKEN_LIFETIME_DAYS` and defaults to `30` days.
 
 In order to perform authentication (without syncing any assets) to validate or acquire the trust token, navigate to the WebUI. If credentials were not supplied at startup, enter the Apple ID username and password in the Web UI first; otherwise select `Renew authentication`.
 

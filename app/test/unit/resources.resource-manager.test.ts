@@ -541,10 +541,10 @@ describe(`ResourceManager`, () => {
             test(`should calculate trust token expiry from creation timestamp`, () => {
                 resourceManager._resources.trustToken = Config.trustToken;
                 resourceManager._resources.trustTokenCreatedAt = 1000;
-                resourceManager._resources.trustTokenLifetimeDays = 60;
+                resourceManager._resources.trustTokenLifetimeDays = 30;
 
                 expect(resourceManager.trustTokenCreatedAt).toEqual(1000);
-                expect(resourceManager.trustTokenExpiresAt).toEqual(1000 + (60 * 24 * 60 * 60 * 1000));
+                expect(resourceManager.trustTokenExpiresAt).toEqual(1000 + (30 * 24 * 60 * 60 * 1000));
             });
 
             test(`should return undefined token expiry when no token is stored`, () => {
@@ -578,6 +578,19 @@ describe(`ResourceManager`, () => {
                     from: `ICPS <icps@example.com>`,
                     to: [`one@example.com`, `two@example.com`],
                 });
+            });
+
+            test(`should format SMTP from address with display name`, () => {
+                resourceManager._resources.smtpHost = `smtp.example.com`;
+                resourceManager._resources.smtpPort = 587;
+                resourceManager._resources.smtpSecure = `starttls`;
+                resourceManager._resources.smtpFrom = `notifications@burg.in`;
+                resourceManager._resources.smtpFromName = `Photo Sync`;
+                resourceManager._resources.smtpTo = `one@example.com`;
+
+                expect(resourceManager.smtpConfig).toEqual(expect.objectContaining({
+                    from: `"Photo Sync" <notifications@burg.in>`,
+                }));
             });
         });
 
