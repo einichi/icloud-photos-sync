@@ -243,6 +243,6 @@ export class EmailNotifier {
     }
 
     private get webUiUrl(): string {
-        return `http://localhost:${Resources.manager().webServerPort}${Resources.manager().webBasePath}/state`;
+        return Resources.manager().notificationWebUrl;
     }
 }

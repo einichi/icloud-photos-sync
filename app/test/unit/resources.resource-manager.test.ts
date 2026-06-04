@@ -767,6 +767,24 @@ describe(`ResourceManager`, () => {
             });
         });
 
+        describe(`notificationWebUrl`, () => {
+            test(`should use localhost and the web server port by default`, () => {
+                resourceManager._resources.port = 8080;
+                resourceManager._resources.webBasePath = `/photos`;
+
+                expect(resourceManager.notificationWebUrl).toEqual(`http://localhost:8080/photos/state`);
+            });
+
+            test(`should use the notification host IP and exposed port when configured`, () => {
+                resourceManager._resources.port = 80;
+                resourceManager._resources.webBasePath = `/photos`;
+                resourceManager._resources.notificationWebHostIp = `192.168.1.50`;
+                resourceManager._resources.notificationWebExposedPort = 8081;
+
+                expect(resourceManager.notificationWebUrl).toEqual(`http://192.168.1.50:8081/photos/state`);
+            });
+        });
+
         describe(`maxRetries`, () => {
             test(`should return the max retries from the resources`, () => {
                 expect(resourceManager.maxRetries).toEqual(resources.maxRetries);

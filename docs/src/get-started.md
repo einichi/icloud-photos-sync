@@ -33,6 +33,8 @@ The `latest` tag should always represent the latest stable release, whereas the 
               # SMTP_FROM: "photos-sync@example.com"
               # SMTP_FROM_NAME: "iCloud Photos Sync"
               # SMTP_TO: "you@example.com"
+              # NOTIFICATION_WEB_HOST_IP: "192.168.1.50"
+              # NOTIFICATION_WEB_EXPOSED_PORT: 8081
             ports:
               - 80:80
             volumes:
@@ -43,7 +45,7 @@ The `latest` tag should always represent the latest stable release, whereas the 
             Apple ID credentials can be supplied from the Web UI after startup. They are kept in memory only and must be entered again after every service restart. If you prefer unattended startup, set `APPLE_ID_USER` and `APPLE_ID_PWD` in the environment; those startup credentials take precedence over Web UI credentials.
 
         !!! tip "Notification emails"
-            Optional SMTP notifications can remind you to authenticate after a service restart and warn when the stored iCloud trust token is nearing expiry. See the [Notifications guide](user-guides/notifications.md) for all supported `SMTP_*` variables.
+            Optional SMTP notifications can remind you to authenticate after a service restart and warn when the stored iCloud trust token is nearing expiry. See the [Notifications guide](user-guides/notifications.md) for all supported SMTP and notification URL variables.
 
         Get the latest image by running:
 

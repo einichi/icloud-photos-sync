@@ -596,6 +596,24 @@ export const nonRejectOptions = [
         expectedOptions: {
             healthCheckUrl: `https://some.url/healthcheck-slug`,
         },
+    }, {
+        options: [
+            `/usr/bin/node`,
+            `/home/icloud-photos-sync/main.js`,
+            `-u`,
+            `test@icloud.com`,
+            `-p`,
+            `testPass`,
+            `--notification-web-host-ip`,
+            `192.168.1.50`,
+            `--notification-web-exposed-port`,
+            `8081`,
+        ],
+        _desc: `Notification Web UI URL set`,
+        expectedOptions: {
+            notificationWebHostIp: `192.168.1.50`,
+            notificationWebExposedPort: 8081,
+        },
     },
 ];
 

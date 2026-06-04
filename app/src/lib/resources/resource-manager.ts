@@ -402,6 +402,15 @@ export class ResourceManager {
     }
 
     /**
+     * @returns The Web UI URL to render in notification emails
+     */
+    get notificationWebUrl(): string {
+        const host = this._resources.notificationWebHostIp?.trim() || `localhost`;
+        const port = this._resources.notificationWebExposedPort ?? this.webServerPort;
+        return `http://${host}:${port}${this.webBasePath}/state`;
+    }
+
+    /**
      * @returns The number of retries to use for downloading
      */
     get maxRetries(): number {

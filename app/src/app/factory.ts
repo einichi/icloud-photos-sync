@@ -149,6 +149,8 @@ export type iCPSAppOptions = {
     smtpFromName?: string,
     smtpTo?: string,
     smtpTokenExpiryWarningDays: number,
+    notificationWebHostIp?: string,
+    notificationWebExposedPort?: number,
 }
 
 /**
@@ -284,6 +286,13 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
         .addOption(new Option(`--smtp-token-expiry-warning-days <number>`, `Send daily SMTP notifications this many days before the stored trust token expires.`)
             .env(`SMTP_TOKEN_EXPIRY_WARNING_DAYS`)
             .default(3)
+            .argParser(commanderParsePositiveInt))
+        .addOption(new Option(`--notification-web-host-ip <ip>`, `Docker host IP to use when rendering Web UI URLs in notification emails.`)
+            .env(`NOTIFICATION_WEB_HOST_IP`)
+            .default(undefined))
+        .addOption(new Option(`--notification-web-exposed-port <number>`, `Docker host exposed Web UI port to use when rendering Web UI URLs in notification emails.`)
+            .env(`NOTIFICATION_WEB_EXPOSED_PORT`)
+            .default(undefined)
             .argParser(commanderParsePositiveInt));
 
     program.command(`daemon`, {isDefault: true})

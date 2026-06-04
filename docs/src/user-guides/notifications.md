@@ -30,6 +30,8 @@ The trust token expiry is estimated from the `trustTokenCreatedAt` timestamp in 
 | `SMTP_TO` | unset | yes | Recipient address. Multiple recipients can be comma-separated. |
 | `SMTP_TOKEN_EXPIRY_WARNING_DAYS` | `3` | no | Start sending daily trust-token expiry warning emails this many days before estimated expiry. |
 | `TRUST_TOKEN_LIFETIME_DAYS` | `30` | no | Number of days a stored trust token is considered valid for Web UI display and notification scheduling. |
+| `NOTIFICATION_WEB_HOST_IP` | `localhost` | no | Docker host IP to use only when rendering Web UI URLs in notification emails. This does not change the Web UI bind address. |
+| `NOTIFICATION_WEB_EXPOSED_PORT` | `PORT` | no | Docker host exposed Web UI port to use only when rendering Web UI URLs in notification emails. This is useful when Docker maps the container's internal `PORT` to a different host port. |
 
 ### Docker Compose Example
 
@@ -49,6 +51,8 @@ services:
       SMTP_TO: "you@example.com"
       SMTP_TOKEN_EXPIRY_WARNING_DAYS: 3
       TRUST_TOKEN_LIFETIME_DAYS: 30
+      NOTIFICATION_WEB_HOST_IP: "192.168.1.50"
+      NOTIFICATION_WEB_EXPOSED_PORT: 8081
 ```
 
 !!! note "Startup authentication reminders"

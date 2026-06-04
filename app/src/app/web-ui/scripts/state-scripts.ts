@@ -106,7 +106,7 @@ function formatTokenExpiry(state) {
     const remainingMs = state.trustTokenExpiresAt - Date.now();
     const absoluteExpiry = formatDate(state.trustTokenExpiresAt);
     if (remainingMs <= 0) {
-        return "<br/><br/>Trust token expired at<br/>" + absoluteExpiry;
+        return "<br/><br/>MFA token expired at<br/>" + absoluteExpiry;
     }
 
     const remainingDays = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
@@ -115,7 +115,7 @@ function formatTokenExpiry(state) {
         ? remainingDays + "d " + remainingHours + "h"
         : remainingHours + "h";
 
-    return "<br/><br/>Trust token expires in " + remaining + "<br/>" + absoluteExpiry;
+    return "<br/><br/>MFA token expires in " + remaining + "<br/>" + absoluteExpiry;
 }
 
 function setProgress(progress) {
