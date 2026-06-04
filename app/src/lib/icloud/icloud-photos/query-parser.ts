@@ -199,15 +199,15 @@ type CPLAssetQuery = {
 function isCPLAssetQuery(obj: unknown): obj is CPLAssetQuery {
     return (obj as CPLAssetQuery).recordType === `CPLAsset`
         && (obj as CPLAssetQuery).recordName !== undefined
-        && (obj as CPLAssetQuery).fields.masterRef?.value.recordName !== undefined
+        && (obj as CPLAssetQuery).fields?.masterRef?.value.recordName !== undefined
         && (obj as CPLAssetQuery).recordName !== undefined
         && (obj as CPLAssetQuery).modified?.timestamp !== undefined
-        && (obj as CPLAssetQuery).zoneID.zoneName !== undefined
+        && (obj as CPLAssetQuery).zoneID?.zoneName !== undefined
         && (
-            (obj as CPLAssetQuery).fields.adjustmentType?.value === undefined // Adjustment Type is optional, but if it is provided one of the below needs to be true
-            || (obj as CPLAssetQuery).fields.adjustmentType?.value === `com.apple.video.slomo` // No additional asset for Slo-Mo videos
-            || ((obj as CPLAssetQuery).fields.resJPEGFullRes !== undefined && isAssetIDQuery((obj as CPLAssetQuery).fields.resJPEGFullRes) && (obj as CPLAssetQuery).fields.resJPEGFullFileType?.value !== undefined)
-            || ((obj as CPLAssetQuery).fields.resVidFullRes !== undefined && isAssetIDQuery((obj as CPLAssetQuery).fields.resVidFullRes) && (obj as CPLAssetQuery).fields.resVidFullFileType?.value !== undefined)
+            (obj as CPLAssetQuery).fields?.adjustmentType?.value === undefined // Adjustment Type is optional, but if it is provided one of the below needs to be true
+            || (obj as CPLAssetQuery).fields?.adjustmentType?.value === `com.apple.video.slomo` // No additional asset for Slo-Mo videos
+            || ((obj as CPLAssetQuery).fields?.resJPEGFullRes !== undefined && isAssetIDQuery((obj as CPLAssetQuery).fields.resJPEGFullRes) && (obj as CPLAssetQuery).fields.resJPEGFullFileType?.value !== undefined)
+            || ((obj as CPLAssetQuery).fields?.resVidFullRes !== undefined && isAssetIDQuery((obj as CPLAssetQuery).fields.resVidFullRes) && (obj as CPLAssetQuery).fields.resVidFullFileType?.value !== undefined)
         );
 }
 
@@ -304,11 +304,11 @@ type CPLMasterQuery = {
 function isCPLMasterQuery(obj: unknown): obj is CPLMasterQuery {
     return (obj as CPLMasterQuery).recordType === `CPLMaster`
         && (obj as CPLMasterQuery).recordName !== undefined
-        && (obj as CPLMasterQuery).modified.timestamp !== undefined
-        && (obj as CPLMasterQuery).fields.resOriginalRes !== undefined && isAssetIDQuery((obj as CPLMasterQuery).fields.resOriginalRes)
-        && (obj as CPLMasterQuery).fields.resOriginalFileType.value !== undefined
-        && (obj as CPLMasterQuery).fields.filenameEnc.value !== undefined
-        && (obj as CPLMasterQuery).zoneID.zoneName !== undefined;
+        && (obj as CPLMasterQuery).modified?.timestamp !== undefined
+        && (obj as CPLMasterQuery).fields?.resOriginalRes !== undefined && isAssetIDQuery((obj as CPLMasterQuery).fields.resOriginalRes)
+        && (obj as CPLMasterQuery).fields?.resOriginalFileType.value !== undefined
+        && (obj as CPLMasterQuery).fields?.filenameEnc.value !== undefined
+        && (obj as CPLMasterQuery).zoneID?.zoneName !== undefined;
 }
 
 /**

@@ -10,7 +10,7 @@ import {Resources} from '../../resources/main.js';
 import {ENDPOINTS, PhotosSetupResponseZone} from '../../resources/network-types.js';
 import {SyncEngineHelper} from '../../sync-engine/helper.js';
 import * as QueryBuilder from './query-builder.js';
-import {CPLAlbum, CPLAsset, CPLMaster} from './query-parser.js';
+import {AssetID, CPLAlbum, CPLAsset, CPLMaster} from './query-parser.js';
 import {PhotosAccountZone, ZoneArea} from '../../resources/resource-types.js';
 
 /**
@@ -937,8 +937,7 @@ export class iCloudPhotos {
      */
     private async applyDownloadURLFromRecord(asset: Asset, record: any): Promise<void> {
         if (record.recordType === QueryBuilder.RECORD_TYPES.PHOTO_MASTER_RECORD) {
-            const master = CPLMaster.parseFromQuery(record);
-            asset.downloadURL = master.resource.downloadURL;
+            asset.downloadURL = AssetID.parseFromQuery(record.fields?.resOriginalRes).downloadURL;
             return;
         }
 
@@ -961,13 +960,13 @@ export class iCloudPhotos {
         }
 
         if (record.recordType === QueryBuilder.RECORD_TYPES.PHOTO_ASSET_RECORD) {
-            const cplAsset = CPLAsset.parseFromQuery(record);
-            if (!cplAsset.resource?.downloadURL) {
+            const assetIdRecord = record.fields?.resJPEGFullRes ?? record.fields?.resVidFullRes;
+            if (!assetIdRecord) {
                 throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
                     .addMessage(`CPLAsset lookup did not include a downloadable resource`);
             }
 
-            asset.downloadURL = cplAsset.resource.downloadURL;
+            asset.downloadURL = AssetID.parseFromQuery(assetIdRecord).downloadURL;
             return;
         }
 
