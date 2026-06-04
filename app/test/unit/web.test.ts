@@ -384,6 +384,22 @@ describe.each([
             expect(res._getStatusCode()).toBe(200)
             expect(res._getJSONData().length).toEqual(expectedLength)
         })
+
+        test(`Valid log request with offset parameter`, async () => {
+            const req = createRequest<IncomingMessage>({
+                method: `GET`,
+                url: `${webBasePath}/api/log`,
+                queryParameters: {
+                    loglevel: `info`,
+                    offset: `2`
+                }
+            })
+
+            const res = await sendMockedRequest(webServer, req)
+            expect(res._getStatusCode()).toBe(200)
+            expect(res._getJSONData().length).toEqual(1)
+            expect(res._getJSONData()[0].level).toEqual(LogLevel.ERROR)
+        })
     })
 
     describe(`Reauth request`, () => {
@@ -1249,7 +1265,7 @@ describe.each([
                 expect(getByTestId(site.body, `logErrorBtn`)).toBeVisible();
                 expect(getByTestId(site.body, `pauseBtn`)).toBeVisible();
 
-                expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=info`, {headers: {Accept: `application/json`}})
+                expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=info&offset=0`, {headers: {Accept: `application/json`}})
                 expect(getByTestId(site.body, `logContent`).childElementCount).toEqual(3);
             })
 
@@ -1269,7 +1285,7 @@ describe.each([
                     jest.advanceTimersByTime(1000)
                     await mock.waitUntilCalled()
 
-                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=debug`, {headers: {Accept: `application/json`}})
+                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=debug&offset=0`, {headers: {Accept: `application/json`}})
                     expect(getByTestId(site.body, `logContent`).childElementCount).toEqual(4);
                 })
                 
@@ -1280,7 +1296,7 @@ describe.each([
                     jest.advanceTimersByTime(1000)
                     await mock.waitUntilCalled()
 
-                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=warn`, {headers: {Accept: `application/json`}})
+                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=warn&offset=0`, {headers: {Accept: `application/json`}})
                     expect(getByTestId(site.body, `logContent`).childElementCount).toEqual(2);
                 })
 
@@ -1291,7 +1307,7 @@ describe.each([
                     jest.advanceTimersByTime(1000)
                     await mock.waitUntilCalled()
 
-                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=error`, {headers: {Accept: `application/json`}})
+                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=error&offset=0`, {headers: {Accept: `application/json`}})
                     expect(getByTestId(site.body, `logContent`).childElementCount).toEqual(1);
                 })
 
@@ -1311,7 +1327,7 @@ describe.each([
                     jest.advanceTimersByTime(1000)
                     await mock.waitUntilCalled()
 
-                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=info`, {headers: {Accept: `application/json`}})
+                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=info&offset=0`, {headers: {Accept: `application/json`}})
                     expect(getByTestId(site.body, `logDebugBtn`)).toBeEnabled();
                     expect(getByTestId(site.body, `logInfoBtn`)).toBeEnabled();
                     expect(getByTestId(site.body, `logWarnBtn`)).toBeEnabled();
@@ -1324,7 +1340,7 @@ describe.each([
                     const logLineMock = site.mockFunction(`addLogLine`)
                     jest.advanceTimersByTime(1000)
                     await mock.waitUntilCalled()
-                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=info`, {headers: {Accept: `application/json`}})
+                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/log?loglevel=info&offset=3`, {headers: {Accept: `application/json`}})
                     expect(logLineMock.jestMock).not.toHaveBeenCalled()
 
                 })

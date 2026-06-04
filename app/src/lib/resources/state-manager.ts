@@ -8,6 +8,9 @@ import {Album} from "../photos-library/model/album.js";
 import {MFAMethod} from "../icloud/mfa/mfa-method.js";
 import {TrustedPhoneNumber} from "./network-types.js";
 
+const ASSET_PROGRESS_UI_INTERVAL = 10;
+const ASSET_PROGRESS_UI_THROTTLE_THRESHOLD = 100;
+
 export enum StateType {
     READY = `ready`,
     RUNNING = `running`,
@@ -21,7 +24,9 @@ export enum StateTrigger {
 
 type LogFilter = {
     level: LogLevel | `none`,
-    source?: RegExp
+    source?: RegExp,
+    offset?: number,
+    limit?: number
 }
 
 export enum LogLevel {
@@ -216,13 +221,11 @@ export class StateManager {
             })
             .on(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, (assetName?: string) => {
                 this.inProgressAssets.completedAssets++
-                const inProgressPercentage = this.inProgressAssets.completedAssets/this.inProgressAssets.totalAssets
-                this.updateState(StateType.RUNNING, {progressMsg: this.getAssetProgressMessage(), progressDetail: assetName, progress: 25 + (inProgressPercentage * 65)});
+                this.updateAssetProgress(assetName);
             })
             .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, (_err?: Error, asset?: Asset) => {
                 this.inProgressAssets.completedAssets++
-                const inProgressPercentage = this.inProgressAssets.completedAssets/this.inProgressAssets.totalAssets
-                this.updateState(StateType.RUNNING, {progressMsg: this.getAssetProgressMessage(), progressDetail: this.getAssetDisplayName(asset), progress: 25 + (inProgressPercentage * 65)});
+                this.updateAssetProgress(this.getAssetDisplayName(asset));
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED, () => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Asset sync completed!`, progress: 90});
@@ -352,6 +355,38 @@ export class StateManager {
      */
     private getAssetProgressMessage(): string {
         return `Syncing assets: ${this.inProgressAssets.completedAssets}/${this.inProgressAssets.totalAssets}`;
+    }
+
+    /**
+     * Updates the asset progress UI state, throttling high-volume syncs to avoid flooding the Web UI.
+     * @param assetName - The current asset display name
+     */
+    private updateAssetProgress(assetName?: string) {
+        if (!this.shouldPublishAssetProgress()) {
+            return;
+        }
+
+        const inProgressPercentage = this.inProgressAssets.totalAssets > 0
+            ? this.inProgressAssets.completedAssets/this.inProgressAssets.totalAssets
+            : 1;
+        this.updateState(StateType.RUNNING, {
+            progressMsg: this.getAssetProgressMessage(),
+            progressDetail: assetName,
+            progress: 25 + (inProgressPercentage * 65)
+        });
+    }
+
+    /**
+     * @returns True when asset progress should be published to state consumers
+     */
+    private shouldPublishAssetProgress(): boolean {
+        if (this.inProgressAssets.totalAssets <= ASSET_PROGRESS_UI_THROTTLE_THRESHOLD) {
+            return true;
+        }
+
+        return this.inProgressAssets.completedAssets === 1
+            || this.inProgressAssets.completedAssets === this.inProgressAssets.totalAssets
+            || this.inProgressAssets.completedAssets % ASSET_PROGRESS_UI_INTERVAL === 0;
     }
 
     /**
@@ -497,8 +532,12 @@ export class StateManager {
             logLevels.push(LogLevel.ERROR)
         }
 
-        return this.log.filter(_value => {
+        const filteredLog = (this.log ?? []).filter(_value => {
             return logLevels.includes(_value.level) && _value.source.match(logFilter?.source) // .match(undefined) returns true
-        })
+        });
+
+        const offset = logFilter.offset ?? 0;
+        const limit = logFilter.limit ?? filteredLog.length;
+        return filteredLog.slice(offset, offset + limit);
     }
 }

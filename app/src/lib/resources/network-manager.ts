@@ -506,7 +506,7 @@ export class NetworkManager {
                 .catch(() => false);
 
             if (locationExists) {
-                Resources.logger(this).info(`File ${location} already exists - skipping download`);
+                Resources.logger(this).debug(`File ${location} already exists - skipping download`);
                 return;
             }
 

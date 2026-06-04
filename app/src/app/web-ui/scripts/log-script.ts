@@ -1,10 +1,13 @@
 export const logScript = (basePath: string) => `
+const MAX_RENDERED_LOG_LINES = 500;
 // The currently selected log filter
 let currentLogFilter = 'none';
 // Stores the reference to the timeout for the log refresh loop
 let currentLogLoop;
 // Stores the paused state
 let isPaused = true
+// Tracks how many server-side log lines have already been rendered for the current filter
+let renderedLogCount = 0;
 
 // Listener for the pause button - will toggle the pause button UI and stop or continue the log refresh loop
 function togglePause() {
@@ -68,7 +71,7 @@ async function refreshLog() {
 // This function returns the fetched log from the server
 async function fetchLog() {
     try{
-        const fetchedState = await fetch("${basePath}/api/log?loglevel=" + currentLogFilter, { 
+        const fetchedState = await fetch("${basePath}/api/log?loglevel=" + currentLogFilter + "&offset=" + renderedLogCount, {
             headers: {
                 "Accept": "application/json"
             }
@@ -110,17 +113,29 @@ function setLog(log) {
     if(!log) {
         return
     }
-    if(log.length === 0) {
+    if(log.length === 0 && renderedLogCount === 0) {
         document.getElementById('logContent').innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">No logs to display</div>';
         return
     }
-    if(log.length === document.getElementById('logContent').childElementCount) {
-        //console.log('Not refreshing view because log count is equal')
+    if(log.length === 0) {
         return
     }
-    document.getElementById('logContent').innerHTML = '';
+
+    if(renderedLogCount === 0) {
+        document.getElementById('logContent').innerHTML = '';
+    }
+
     for (const logLine of log) {
         addLogLine(logLine.level, logLine.source, logLine.message, logLine.time)
+    }
+    renderedLogCount += log.length;
+    trimRenderedLogs();
+}
+
+function trimRenderedLogs() {
+    const logContent = document.getElementById('logContent');
+    while(logContent.childElementCount > MAX_RENDERED_LOG_LINES) {
+        logContent.removeChild(logContent.firstElementChild);
     }
 }
 
@@ -158,6 +173,7 @@ function addLogLine(level, source, message, time) {
 
 // Replaces the log content with a loading indicator
 function setLogLoading() {
+    renderedLogCount = 0;
     document.getElementById('logContent').innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">Loading logs...</div>';
 }
 `

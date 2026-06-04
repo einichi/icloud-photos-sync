@@ -807,6 +807,13 @@ describe(`Log added`, () => {
                 },
                 expectedLength: 0
             },{
+                desc: `info with offset`,
+                logFilter: {
+                    level: LogLevel.INFO,
+                    offset: 2
+                },
+                expectedLength: 1
+            },{
                 desc: `no`,
                 logFilter: {
                     level: `none`

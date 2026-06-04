@@ -9,6 +9,7 @@ import {Resources} from '../resources/main.js';
 import {SyncEngineHelper} from './helper.js';
 import {iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-types.js';
 import {AxiosError} from 'axios';
+import fs from 'fs/promises';
 
 const RETRY_BACKOFF_BASE_MS = 30 * 1000;
 const RETRY_BACKOFF_MAX_MS = 5 * 60 * 1000;
@@ -374,7 +375,7 @@ export class SyncEngine {
         Resources.emit(iCPSEventSyncEngine.WRITE);
         Resources.logger(this).info(`Writing state`);
 
-        Resources.emit(iCPSEventSyncEngine.WRITE_ASSETS, assetQueue[0].length, assetQueue[1].length, assetQueue[2].length);
+        Resources.emit(iCPSEventSyncEngine.WRITE_ASSETS, assetQueue[0].length, this.getUniqueAssets(assetQueue[1]).length, assetQueue[2].length);
         await this.writeAssets(assetQueue);
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED);
 
@@ -392,7 +393,7 @@ export class SyncEngine {
      */
     async writeAssets(processingQueue: PLibraryProcessingQueues<Asset>) {
         const toBeDeleted = processingQueue[0];
-        const toBeAdded = processingQueue[1];
+        const toBeAdded = this.getUniqueAssets(processingQueue[1]);
         // Initializing sync queue
 
         Resources.logger(this).info(`Writing assets by deleting ${toBeDeleted.length} local asset(s) and adding ${toBeAdded.length} remote asset(s)`);
@@ -401,11 +402,18 @@ export class SyncEngine {
         await Promise.all(toBeDeleted.map(asset => this.photosLibrary.deleteAsset(asset)));
 
         let completedAssets = 0;
-        await Promise.all(toBeAdded.map(async asset => {
-            await this.addAsset(asset);
-            completedAssets++;
-            if (completedAssets % ASSET_PROGRESS_LOG_INTERVAL === 0 || completedAssets === toBeAdded.length) {
-                Resources.logger(this).info(`Asset sync progress: ${completedAssets}/${toBeAdded.length}`);
+        const nextAsset = toBeAdded.values();
+        const configuredWorkerCount = Resources.manager().downloadThreads === Infinity
+            ? toBeAdded.length
+            : Resources.manager().downloadThreads;
+        const workerCount = Math.min(configuredWorkerCount, toBeAdded.length);
+        await Promise.all(Array.from({length: workerCount}, async () => {
+            for (let next = nextAsset.next(); !next.done; next = nextAsset.next()) {
+                await this.addAsset(next.value);
+                completedAssets++;
+                if (completedAssets % ASSET_PROGRESS_LOG_INTERVAL === 0 || completedAssets === toBeAdded.length) {
+                    Resources.logger(this).info(`Asset sync progress: ${completedAssets}/${toBeAdded.length}`);
+                }
             }
         }));
     }
@@ -419,6 +427,11 @@ export class SyncEngine {
      */
     async addAsset(asset: Asset) {
         try {
+            if (await this.hasValidLocalAsset(asset)) {
+                Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, this.getAssetProgressDisplayName(asset));
+                return;
+            }
+
             await this.icloud.photos.downloadAsset(asset);
             await asset.verify();
         } catch (err) {
@@ -428,6 +441,28 @@ export class SyncEngine {
         }
 
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, this.getAssetProgressDisplayName(asset));
+    }
+
+    /**
+     * Checks whether the local asset file already matches iCloud. Stale or partial files are removed so the download can start cleanly.
+     * @param asset - The asset being written
+     * @returns True if the asset is already valid locally
+     */
+    private async hasValidLocalAsset(asset: Asset): Promise<boolean> {
+        try {
+            await fs.stat(asset.getAssetFilePath());
+        } catch (_err) {
+            return false;
+        }
+
+        try {
+            await asset.verify();
+            Resources.logger(this).debug(`Asset ${this.getAssetProgressDisplayName(asset)} already exists locally and passed verification`);
+            return true;
+        } catch (_err) {
+            await this.deleteFailedAsset(asset);
+            return false;
+        }
     }
 
     /**
@@ -453,6 +488,24 @@ export class SyncEngine {
         }
 
         return asset.getAssetFilename();
+    }
+
+    /**
+     * Removes duplicate asset file writes from the queue.
+     * @param assets - Assets scheduled for writing
+     * @returns Assets with one entry per target file path
+     */
+    private getUniqueAssets(assets: Asset[]): Asset[] {
+        const uniqueAssets = new Map<string, Asset>();
+        assets.forEach(asset => {
+            uniqueAssets.set(asset.getAssetFilePath(), asset);
+        });
+
+        if (uniqueAssets.size !== assets.length) {
+            Resources.logger(this).info(`Collapsed ${assets.length - uniqueAssets.size} duplicate asset write(s) targeting files already queued`);
+        }
+
+        return [...uniqueAssets.values()];
     }
 
     /**

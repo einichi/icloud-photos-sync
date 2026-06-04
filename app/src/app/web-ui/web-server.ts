@@ -318,16 +318,30 @@ export class WebServer {
 
     handleLogRequest(url: URL): WebServerResponse {
         const logLevelMatch = url.search.match(/loglevel=(debug|info|warn|error)/);
-        const logLevel = logLevelMatch?.[1] as LogLevel ?? `none`
+        const logLevel = logLevelMatch?.[1] as LogLevel ?? `none`;
+        const offset = this.parsePositiveQueryNumber(url.searchParams.get(`offset`));
 
         return {
             code: 200,
             header: {
                 "Content-Type": `application/json`
             },
-            body: Resources.state().serializeLog({level: logLevel})
+            body: Resources.state().serializeLog({level: logLevel, offset})
         }
 
+    }
+
+    private parsePositiveQueryNumber(value: string | null): number | undefined {
+        if (value === null) {
+            return undefined;
+        }
+
+        const parsedValue = Number(value);
+        if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+            return undefined;
+        }
+
+        return Math.floor(parsedValue);
     }
 
     handleVapidPublicKeyRequest(): WebServerResponse {
