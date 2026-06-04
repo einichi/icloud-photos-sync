@@ -98,6 +98,26 @@ function setRunningStateText(text, detail) {
     document.querySelector("#state-text").innerHTML = safeText + safeDetail;
 }
 
+function formatTokenExpiry(state) {
+    if (!state.trustTokenExpiresAt) {
+        return "";
+    }
+
+    const remainingMs = state.trustTokenExpiresAt - Date.now();
+    const absoluteExpiry = formatDate(state.trustTokenExpiresAt);
+    if (remainingMs <= 0) {
+        return "<br/><br/>Trust token expired at<br/>" + absoluteExpiry;
+    }
+
+    const remainingDays = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
+    const remainingHours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    const remaining = remainingDays > 0
+        ? remainingDays + "d " + remainingHours + "h"
+        : remainingHours + "h";
+
+    return "<br/><br/>Trust token expires in " + remaining + "<br/>" + absoluteExpiry;
+}
+
 function setProgress(progress) {
     if(progress && progress >= 0) {
         document.getElementById('progress-container').style.display = "block";
@@ -172,12 +192,13 @@ function updateState(state) {
             enableSymbol('ok')
 
             if(!state.prevTrigger) {
-                setStateText("Application ready")
+                setStateText("Application ready" + formatTokenExpiry(state))
                 return
             }
 
             setStateText("Last " + (state.prevTrigger ?? "operation") + " successful at<br/>" +
-                formatDate(state.timestamp) 
+                formatDate(state.timestamp) +
+                formatTokenExpiry(state)
             )
             return;
         case 'blocked': 

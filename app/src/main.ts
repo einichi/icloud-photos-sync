@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import {CLIInterface} from "./app/event/cli.js";
+import {EmailNotifier} from "./app/event/email-notifier.js";
 import {ErrorHandler} from "./app/event/error-handler.js";
 import {HealthCheckPingExecutor} from "./app/event/health-check-ping-executor.js";
 import {LogInterface} from "./app/event/log.js";
@@ -15,6 +16,7 @@ const _logInterface = new LogInterface();
 const _cliInterface = new CLIInterface();
 const _metricsExporter = new MetricsExporter();
 const _healthCheckPingExecutor = new HealthCheckPingExecutor();
+const _emailNotifier = new EmailNotifier();
 
 try {
     const _webServer = await WebServer.spawn();

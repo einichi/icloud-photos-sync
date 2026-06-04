@@ -47,3 +47,7 @@ volumes:
 ```
 
 Apple ID credentials can be entered from the `icloud-photos-sync` Web UI after startup. They are kept in memory only and must be entered again after every service restart. If you prefer unattended startup, set `APPLE_ID_USER` and `APPLE_ID_PWD` in the environment; those startup credentials take precedence over Web UI credentials.
+
+When a trust token is available, the ready page shows an estimated expiry countdown below the status text. This estimate is based on the `trustTokenCreatedAt` timestamp in the `.icloud-photos-sync` resource file and the configured `TRUST_TOKEN_LIFETIME_DAYS` value. The token itself is still the source of authentication; the timestamp is only used for display and optional notification scheduling.
+
+Optional SMTP notifications can also be enabled to email you when the service starts without in-memory credentials and when the trust token is nearing expiry. See [Notifications](notifications.md).

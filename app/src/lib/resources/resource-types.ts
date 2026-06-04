@@ -58,6 +58,10 @@ export type ResourceFile = {
      */
     trustToken?: string,
     /**
+     * Timestamp when the currently used trust token was first persisted.
+     */
+    trustTokenCreatedAt?: number,
+    /**
      * The notification vapid credentials used to send push notifications
      */
     notificationVapidCredentials?: {

@@ -17,6 +17,18 @@ type AppleCredentials = {
     password: string
 }
 
+export type SmtpConfig = {
+    host: string,
+    port: number,
+    secure: `starttls` | `implicit`,
+    user?: string,
+    password?: string,
+    from: string,
+    to: string[]
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function removeUndefinedOptions<T extends object>(options: T): Partial<T> {
     return Object.entries(options).reduce<Partial<T>>((definedOptions, [key, value]) => {
         if (value !== undefined) {
@@ -52,6 +64,9 @@ export class ResourceManager {
         if(this._resources.refreshToken) {
             Resources.logger(this).warn(`Refresh token option is enabled; clearing stored iCloud trust token`);
             this._resources.trustToken = undefined
+            this._resources.trustTokenCreatedAt = undefined
+        } else if (this._resources.trustToken && !this._resources.trustTokenCreatedAt) {
+            this._resources.trustTokenCreatedAt = Date.now();
         }
         // Making sure new merged configuration is persisted to file
         this._writeResourceFile()
@@ -86,6 +101,7 @@ export class ResourceManager {
             const formattedResourceFile: ResourceFile = {
                 libraryVersion: this._resources.libraryVersion,
                 trustToken: this._resources.trustToken,
+                trustTokenCreatedAt: this._resources.trustTokenCreatedAt,
                 notificationVapidCredentials: this._resources.notificationVapidCredentials,
                 notificationSubscriptions: this._resources.notificationSubscriptions
             };
@@ -170,11 +186,18 @@ export class ResourceManager {
      */
     get trustToken(): string | undefined {
         const previousTrustToken = this._resources.trustToken;
+        const previousTrustTokenCreatedAt = this._resources.trustTokenCreatedAt;
         const resourceFile = this._readResourceFile();
         if (resourceFile.trustToken || !previousTrustToken) {
             this._resources.trustToken = resourceFile.trustToken;
+            this._resources.trustTokenCreatedAt = resourceFile.trustTokenCreatedAt;
         } else {
             Resources.logger(this).warn(`Resource file at ${this.resourceFilePath} has no trust token; retaining in-memory trust token`);
+            this._resources.trustTokenCreatedAt = previousTrustTokenCreatedAt;
+        }
+        if (this._resources.trustToken && !this._resources.trustTokenCreatedAt) {
+            this._resources.trustTokenCreatedAt = Date.now();
+            this._writeResourceFile();
         }
         Resources.logger(this).info(`Trust token lookup from ${this.resourceFilePath}: ${this._resources.trustToken ? `present` : `absent`}`);
 
@@ -186,8 +209,63 @@ export class ResourceManager {
      * @param trustToken - The trust token to use
      */
     set trustToken(trustToken: string | undefined) {
+        const previousTrustToken = this._resources.trustToken;
         this._resources.trustToken = trustToken;
+        if (!trustToken) {
+            this._resources.trustTokenCreatedAt = undefined;
+        } else if (trustToken !== previousTrustToken || !this._resources.trustTokenCreatedAt) {
+            this._resources.trustTokenCreatedAt = Date.now();
+        }
         this._writeResourceFile();
+    }
+
+    /**
+     * @returns The timestamp when the current trust token was first persisted, if available
+     */
+    get trustTokenCreatedAt(): number | undefined {
+        return this._resources.trustTokenCreatedAt;
+    }
+
+    /**
+     * @returns The timestamp when the current trust token should be considered expired, if known
+     */
+    get trustTokenExpiresAt(): number | undefined {
+        if (!this._resources.trustToken || !this._resources.trustTokenCreatedAt) {
+            return undefined;
+        }
+
+        return this._resources.trustTokenCreatedAt + (this._resources.trustTokenLifetimeDays * DAY_MS);
+    }
+
+    /**
+     * @returns How many days before token expiry SMTP warnings should start
+     */
+    get smtpTokenExpiryWarningDays(): number {
+        return this._resources.smtpTokenExpiryWarningDays;
+    }
+
+    /**
+     * @returns SMTP configuration, if enough options were provided to enable email notifications
+     */
+    get smtpConfig(): SmtpConfig | undefined {
+        if (!this._resources.smtpHost || !this._resources.smtpFrom || !this._resources.smtpTo) {
+            return undefined;
+        }
+
+        const recipients = this._resources.smtpTo.split(`,`).map(recipient => recipient.trim()).filter(recipient => recipient.length > 0);
+        if (recipients.length === 0) {
+            return undefined;
+        }
+
+        return {
+            host: this._resources.smtpHost,
+            port: this._resources.smtpPort,
+            secure: this._resources.smtpSecure,
+            user: this._resources.smtpUser,
+            password: this._resources.smtpPassword,
+            from: this._resources.smtpFrom,
+            to: recipients,
+        };
     }
 
     /**

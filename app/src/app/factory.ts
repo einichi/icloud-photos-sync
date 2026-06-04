@@ -139,6 +139,15 @@ export type iCPSAppOptions = {
     legacyLogin: boolean,
     metadataRate: [number, number],
     healthCheckUrl?: string,
+    trustTokenLifetimeDays: number,
+    smtpHost?: string,
+    smtpPort: number,
+    smtpSecure: `starttls` | `implicit`,
+    smtpUser?: string,
+    smtpPassword?: string,
+    smtpFrom?: string,
+    smtpTo?: string,
+    smtpTokenExpiryWarningDays: number,
 }
 
 /**
@@ -240,7 +249,38 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
         .addOption(new Option(`--health-check-url <url>`, `URL to ping to monitor the health of icloud photos sync, see https://icps.steiler.dev/health-checks/ for more information.`)
             .env(`HEALTH_CHECK_URL`)
             .default(undefined)
-            .argParser(commanderParseUrl));
+            .argParser(commanderParseUrl))
+        .addOption(new Option(`--trust-token-lifetime-days <number>`, `Number of days a stored trust token is considered valid for expiry display and notifications.`)
+            .env(`TRUST_TOKEN_LIFETIME_DAYS`)
+            .default(60)
+            .argParser(commanderParsePositiveInt))
+        .addOption(new Option(`--smtp-host <host>`, `SMTP host for optional notification emails.`)
+            .env(`SMTP_HOST`)
+            .default(undefined))
+        .addOption(new Option(`--smtp-port <number>`, `SMTP port for optional notification emails.`)
+            .env(`SMTP_PORT`)
+            .default(587)
+            .argParser(commanderParsePositiveInt))
+        .addOption(new Option(`--smtp-secure <mode>`, `SMTP TLS mode for optional notification emails.`)
+            .env(`SMTP_SECURE`)
+            .choices([`starttls`, `implicit`])
+            .default(`starttls`))
+        .addOption(new Option(`--smtp-user <string>`, `SMTP username for optional notification emails.`)
+            .env(`SMTP_USER`)
+            .default(undefined))
+        .addOption(new Option(`--smtp-password <string>`, `SMTP password for optional notification emails.`)
+            .env(`SMTP_PASSWORD`)
+            .default(undefined))
+        .addOption(new Option(`--smtp-from <email>`, `Sender address for optional notification emails.`)
+            .env(`SMTP_FROM`)
+            .default(undefined))
+        .addOption(new Option(`--smtp-to <email>`, `Recipient address for optional notification emails. Multiple recipients can be comma-separated.`)
+            .env(`SMTP_TO`)
+            .default(undefined))
+        .addOption(new Option(`--smtp-token-expiry-warning-days <number>`, `Send daily SMTP notifications this many days before the stored trust token expires.`)
+            .env(`SMTP_TOKEN_EXPIRY_WARNING_DAYS`)
+            .default(3)
+            .argParser(commanderParsePositiveInt));
 
     program.command(`daemon`, {isDefault: true})
         .action(async (_, command) => {

@@ -16,7 +16,7 @@ The root folder is specified through environment variable `DATA_DIR`. All assets
   * [`_All-Photos` folder](#primary-asset-dir) (aka. `PRIMARY_ASSET_DIR`)
   * [`_Shared-Photos` folder](#shared-asset-dir) (aka. `SHARED_ASSET_DIR`)
   * [`_Archive` folder](#archive-dir) (aka. `ARCHIVE_DIR`)
-  * `.icloud-photos-sync` file holding resource information about the current photos library (including authentication secrets for re-authentication without MFA)
+  * `.icloud-photos-sync` file holding resource information about the current photos library (including authentication secrets for re-authentication without MFA and the `trustTokenCreatedAt` timestamp used to estimate token expiry)
   * `.icloud-photos-sync.log` log file (overwritten upon application restart)
   * `icloud-photos-sync.metrics` file, that [export metrics using the Influx Line Protocol](../user-guides/sync-metrics.md) (overwritten upon application restart), if [metrics export is enabled](../user-guides/cli.md#export-metrics)
   * `icloud-photos-sync.har` file, that contains a HAR file capture of the last execution, if [network capture is enabled](../user-guides/cli.md#enable-network-capture)

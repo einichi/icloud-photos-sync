@@ -65,6 +65,7 @@ describe(`ResourceManager`, () => {
                 ...Config.defaultConfig,
                 libraryVersion: 1,
                 trustToken: Config.trustToken,
+                trustTokenCreatedAt: expect.any(Number),
             });
         });
 
@@ -84,6 +85,7 @@ describe(`ResourceManager`, () => {
                 ...Config.defaultConfig,
                 libraryVersion: 1,
                 trustToken: Config.trustToken,
+                trustTokenCreatedAt: expect.any(Number),
             });
         });
 
@@ -126,6 +128,7 @@ describe(`ResourceManager`, () => {
                 ...Config.defaultConfig,
                 libraryVersion: 1,
                 trustToken: Config.trustToken,
+                trustTokenCreatedAt: expect.any(Number),
             });
         });
 
@@ -149,6 +152,7 @@ describe(`ResourceManager`, () => {
                 ...Config.defaultConfig,
                 libraryVersion: 1,
                 trustToken: Config.trustToken,
+                trustTokenCreatedAt: expect.any(Number),
             });
         });
 
@@ -173,6 +177,7 @@ describe(`ResourceManager`, () => {
                 ...Config.defaultConfig,
                 libraryVersion: 1,
                 trustToken: undefined,
+                trustTokenCreatedAt: undefined,
                 refreshToken: true,
             });
         });
@@ -203,6 +208,7 @@ describe(`ResourceManager`, () => {
                 ...Config.defaultConfig,
                 libraryVersion: 1,
                 trustToken: Config.trustToken,
+                trustTokenCreatedAt: expect.any(Number),
                 notificationVapidCredentials: {
                     publicKey: `somePublicKey`,
                     privateKey: `somePrivateKey`
@@ -527,6 +533,51 @@ describe(`ResourceManager`, () => {
                 expect(((resourceManager._writeResourceFile as jest.Mock).mock.contexts[0] as ResourceManager)._resources.trustToken).toEqual(Config.trustTokenModified);
                 expect(((resourceManager._writeResourceFile as jest.Mock).mock.contexts[0] as ResourceManager)._resources.libraryVersion).toEqual(1);
                 expect(resourceManager._resources.trustToken).toEqual(Config.trustTokenModified);
+                expect(resourceManager._resources.trustTokenCreatedAt).toEqual(expect.any(Number));
+            });
+        });
+
+        describe(`trust token expiry`, () => {
+            test(`should calculate trust token expiry from creation timestamp`, () => {
+                resourceManager._resources.trustToken = Config.trustToken;
+                resourceManager._resources.trustTokenCreatedAt = 1000;
+                resourceManager._resources.trustTokenLifetimeDays = 60;
+
+                expect(resourceManager.trustTokenCreatedAt).toEqual(1000);
+                expect(resourceManager.trustTokenExpiresAt).toEqual(1000 + (60 * 24 * 60 * 60 * 1000));
+            });
+
+            test(`should return undefined token expiry when no token is stored`, () => {
+                resourceManager._resources.trustToken = undefined;
+                resourceManager._resources.trustTokenCreatedAt = 1000;
+
+                expect(resourceManager.trustTokenExpiresAt).toBeUndefined();
+            });
+        });
+
+        describe(`smtpConfig`, () => {
+            test(`should return undefined when SMTP configuration is incomplete`, () => {
+                expect(resourceManager.smtpConfig).toBeUndefined();
+            });
+
+            test(`should parse SMTP configuration recipients`, () => {
+                resourceManager._resources.smtpHost = `smtp.example.com`;
+                resourceManager._resources.smtpPort = 587;
+                resourceManager._resources.smtpSecure = `starttls`;
+                resourceManager._resources.smtpUser = `smtp-user`;
+                resourceManager._resources.smtpPassword = `smtp-password`;
+                resourceManager._resources.smtpFrom = `ICPS <icps@example.com>`;
+                resourceManager._resources.smtpTo = `one@example.com, two@example.com`;
+
+                expect(resourceManager.smtpConfig).toEqual({
+                    host: `smtp.example.com`,
+                    port: 587,
+                    secure: `starttls`,
+                    user: `smtp-user`,
+                    password: `smtp-password`,
+                    from: `ICPS <icps@example.com>`,
+                    to: [`one@example.com`, `two@example.com`],
+                });
             });
         });
 

@@ -27,6 +27,11 @@ The `latest` tag should always represent the latest stable release, whereas the 
               TZ: "Europe/Berlin"                                                       
               SCHEDULE: "0 2 * * *"
               ENABLE_CRASH_REPORTING: true
+              # Optional email notifications. See User Guides > Notifications.
+              # SMTP_HOST: "smtp.example.com"
+              # SMTP_PORT: 587
+              # SMTP_FROM: "iCloud Photos Sync <photos-sync@example.com>"
+              # SMTP_TO: "you@example.com"
             ports:
               - 80:80
             volumes:
@@ -35,6 +40,9 @@ The `latest` tag should always represent the latest stable release, whereas the 
 
         !!! tip "Apple ID credentials"
             Apple ID credentials can be supplied from the Web UI after startup. They are kept in memory only and must be entered again after every service restart. If you prefer unattended startup, set `APPLE_ID_USER` and `APPLE_ID_PWD` in the environment; those startup credentials take precedence over Web UI credentials.
+
+        !!! tip "Notification emails"
+            Optional SMTP notifications can remind you to authenticate after a service restart and warn when the stored iCloud trust token is nearing expiry. See the [Notifications guide](user-guides/notifications.md) for all supported `SMTP_*` variables.
 
         Get the latest image by running:
 
@@ -124,6 +132,8 @@ The primary interface to interact with this application is a WebUI, however conf
 ### Authentication
 
 Since this application needs full access to a user's iCloud Photos Library, a full authentication with Apple (including Multi-Factor-Authentication) is initially required. While this will acquire a trust token, Apple's system requires refreshing this token every ~30 days by providing a re-authentication utilizing an MFA code.
+
+The trust token is stored in the `.icloud-photos-sync` resource file together with the timestamp when it was persisted. The Web UI uses that timestamp to show an estimated time until token expiry. The estimate is controlled by `TRUST_TOKEN_LIFETIME_DAYS` and defaults to `60` days.
 
 In order to perform authentication (without syncing any assets) to validate or acquire the trust token, navigate to the WebUI. If credentials were not supplied at startup, enter the Apple ID username and password in the Web UI first; otherwise select `Renew authentication`.
 

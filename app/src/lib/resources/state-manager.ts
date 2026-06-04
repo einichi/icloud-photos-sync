@@ -52,6 +52,8 @@ export type SerializedState = {
     progress?: number,
     progressMsg?: string,
     progressDetail?: string,
+    trustTokenCreatedAt?: number,
+    trustTokenExpiresAt?: number,
     trustedPhoneNumbers?: {
         id: number,
         maskedNumber: string
@@ -467,6 +469,8 @@ export class StateManager {
             progress: this.inProgressContext?.progress,
             progressMsg: this.inProgressContext?.message,
             progressDetail: this.inProgressContext?.detail,
+            trustTokenCreatedAt: Resources.manager().trustTokenCreatedAt,
+            trustTokenExpiresAt: Resources.manager().trustTokenExpiresAt,
             trustedPhoneNumbers
         };
     }
