@@ -1100,6 +1100,20 @@ describe.each([
                 expect(getByTestId(site.body, `next-sync-text`)).toHaveTextContent(`Next sync scheduled at...`);
             })
 
+            test(`Escapes previous error text`, async () => {
+                mockedEventManager.emit(iCPSEventApp.SCHEDULED_START)
+                mockedEventManager.emit(iCPSEventRuntimeError.SCHEDULED_ERROR, new Error(`<img src=x onerror=alert(1)>`))
+                mockedState.timestamp = 1000
+                await site.load(`${webBasePath}/state`)
+
+                await site.dom.window.refreshState()
+
+                const stateText = getByTestId(site.body, `state-text`);
+                expect(stateText).toHaveTextContent(`Last sync failed at${formattedTestDate(new Date(1000))}UNKNOWN: Unknown error occurred caused by <img src=x onerror=alert(1)>`);
+                expect(stateText.innerHTML).toContain(`&lt;img src=x onerror=alert(1)&gt;`);
+                expect(stateText.innerHTML).not.toContain(`<img src=x`);
+            })
+
             test(`Handle 'ready' state with previous error triggered by auth`, async () => {
                 mockedEventManager.emit(iCPSEventWebServer.REAUTH_REQUESTED)
                 mockedEventManager.emit(iCPSEventRuntimeError.SCHEDULED_ERROR, new Error(`test`))
