@@ -17,6 +17,10 @@ let mockedEventManager: MockedEventManager;
 let mockedValidator: Validator;
 let photos: iCloudPhotos;
 
+const flushPromises = () => new Promise<void>(resolve => {
+    setImmediate(resolve);
+});
+
 beforeEach(() => {
     const instances = prepareResources()!;
     mockedResourceManager = instances.manager;
@@ -491,7 +495,7 @@ describe.each([
                 });
 
             const fetchPromise = photos.fetchAllPictureRecordsForZone(zone);
-            await Promise.resolve();
+            await flushPromises();
 
             expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledTimes(4);
             expect(photos.fetchPictureRecordsPageForZone).toHaveBeenNthCalledWith(1, zone, 0, undefined);
@@ -501,7 +505,7 @@ describe.each([
             resolvePage.get(1)!();
             resolvePage.get(2)!();
             resolvePage.get(3)!();
-            await Promise.resolve();
+            await flushPromises();
 
             expect(photos.fetchPictureRecordsPageForZone).toHaveBeenCalledTimes(5);
             expect(photos.fetchPictureRecordsPageForZone).toHaveBeenNthCalledWith(5, zone, 4, undefined);

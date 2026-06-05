@@ -452,7 +452,10 @@ export class PhotosLibrary {
                 .addMessage(albumNamePath);
         }
 
-        fs.rmSync(uuidPath, {recursive: true});
+        fs.readdirSync(uuidPath).forEach(item => {
+            fs.unlinkSync(path.join(uuidPath, item));
+        });
+        fs.rmdirSync(uuidPath);
         fs.unlinkSync(albumNamePath);
         Resources.logger(this).debug(`Successfully deleted album ${album.getDisplayName()} at ${albumNamePath} & ${uuidPath}`);
     }

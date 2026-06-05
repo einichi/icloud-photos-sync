@@ -20,6 +20,8 @@ let mockedEventManager: MockedEventManager;
 let mockedNetworkManager: MockedNetworkManager;
 let syncEngine: SyncEngine;
 
+const testChecksum = (seed: string) => Buffer.from(seed).toString(`base64`);
+
 beforeEach(() => {
     const instances = prepareResources()!;
 
@@ -414,9 +416,9 @@ describe(`Handle processing queue`, () => {
         });
 
         test(`Only deleting`, async () => {
-            const asset1 = new Asset(`somechecksum1`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, `somechecksum1`, `https://icloud.com`, `somerecordname1`, false);
-            const asset2 = new Asset(`somechecksum2`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, `somechecksum2`, `https://icloud.com`, `somerecordname2`, false);
-            const asset3 = new Asset(`somechecksum3`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, `somechecksum3`, `https://icloud.com`, `somerecordname3`, false);
+            const asset1 = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
+            const asset2 = new Asset(testChecksum(`asset2`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, testChecksum(`asset2`), `https://icloud.com`, `somerecordname2`, false);
+            const asset3 = new Asset(testChecksum(`asset3`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, testChecksum(`asset3`), `https://icloud.com`, `somerecordname3`, false);
             const toBeDeleted = [asset1, asset2, asset3];
 
             await syncEngine.writeAssets([toBeDeleted, [], []]);
@@ -430,11 +432,11 @@ describe(`Handle processing queue`, () => {
         });
 
         test(`Only adding`, async () => {
-            const asset1 = new Asset(`somechecksum1`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, `somechecksum1`, `https://icloud.com`, `somerecordname1`, false);
+            const asset1 = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
             asset1.verify = jest.fn<typeof asset1.verify>();
-            const asset2 = new Asset(`somechecksum2`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, `somechecksum2`, `https://icloud.com`, `somerecordname2`, false);
+            const asset2 = new Asset(testChecksum(`asset2`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, testChecksum(`asset2`), `https://icloud.com`, `somerecordname2`, false);
             asset2.verify = jest.fn<typeof asset2.verify>();
-            const asset3 = new Asset(`somechecksum3`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, `somechecksum3`, `https://icloud.com`, `somerecordname3`, false);
+            const asset3 = new Asset(testChecksum(`asset3`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, testChecksum(`asset3`), `https://icloud.com`, `somerecordname3`, false);
             asset3.verify = jest.fn<typeof asset3.verify>();
             const toBeAdded = [asset1, asset2, asset3];
 
@@ -456,11 +458,11 @@ describe(`Handle processing queue`, () => {
         });
 
         test(`Only adding with verification error`, async () => {
-            const asset1 = new Asset(`somechecksum1`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, `somechecksum1`, `https://icloud.com`, `somerecordname1`, false);
+            const asset1 = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
             asset1.verify = jest.fn<typeof asset1.verify>();
-            const asset2 = new Asset(`somechecksum2`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, `somechecksum2`, `https://icloud.com`, `somerecordname2`, false);
+            const asset2 = new Asset(testChecksum(`asset2`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, testChecksum(`asset2`), `https://icloud.com`, `somerecordname2`, false);
             asset2.verify = jest.fn<typeof asset2.verify>();
-            const asset3 = new Asset(`somechecksum3`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, `somechecksum3`, `https://icloud.com`, `somerecordname3`, false);
+            const asset3 = new Asset(testChecksum(`asset3`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, testChecksum(`asset3`), `https://icloud.com`, `somerecordname3`, false);
             asset3.verify = jest.fn<typeof asset3.verify>()
                 .mockRejectedValue(new Error(`verification error`));
 
@@ -484,11 +486,11 @@ describe(`Handle processing queue`, () => {
         });
 
         test(`Only adding with download error`, async () => {
-            const asset1 = new Asset(`somechecksum1`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, `somechecksum1`, `https://icloud.com`, `somerecordname1`, false);
+            const asset1 = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
             asset1.verify = jest.fn<typeof asset1.verify>();
-            const asset2 = new Asset(`somechecksum2`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, `somechecksum2`, `https://icloud.com`, `somerecordname2`, false);
+            const asset2 = new Asset(testChecksum(`asset2`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, testChecksum(`asset2`), `https://icloud.com`, `somerecordname2`, false);
             asset2.verify = jest.fn<typeof asset2.verify>();
-            const asset3 = new Asset(`somechecksum3`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, `somechecksum3`, `https://icloud.com`, `somerecordname3`, false);
+            const asset3 = new Asset(testChecksum(`asset3`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, testChecksum(`asset3`), `https://icloud.com`, `somerecordname3`, false);
             asset3.verify = jest.fn<typeof asset3.verify>();
 
             const downloadError = new Error(`download error`);
@@ -517,15 +519,15 @@ describe(`Handle processing queue`, () => {
         });
 
         test(`Adding & deleting`, async () => {
-            const asset1 = new Asset(`somechecksum1`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, `somechecksum1`, `https://icloud.com`, `somerecordname1`, false);
+            const asset1 = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
             asset1.verify = jest.fn<typeof asset1.verify>();
-            const asset2 = new Asset(`somechecksum2`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, `somechecksum2`, `https://icloud.com`, `somerecordname2`, false);
+            const asset2 = new Asset(testChecksum(`asset2`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, testChecksum(`asset2`), `https://icloud.com`, `somerecordname2`, false);
             asset2.verify = jest.fn<typeof asset2.verify>();
-            const asset3 = new Asset(`somechecksum3`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, `somechecksum3`, `https://icloud.com`, `somerecordname3`, false);
+            const asset3 = new Asset(testChecksum(`asset3`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test3`, `somekey`, testChecksum(`asset3`), `https://icloud.com`, `somerecordname3`, false);
             asset3.verify = jest.fn<typeof asset3.verify>();
-            const asset4 = new Asset(`somechecksum4`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test4`, `somekey`, `somechecksum4`, `https://icloud.com`, `somerecordname4`, false);
-            const asset5 = new Asset(`somechecksum5`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test5`, `somekey`, `somechecksum5`, `https://icloud.com`, `somerecordname5`, false);
-            const asset6 = new Asset(`somechecksum6`, 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test6`, `somekey`, `somechecksum6`, `https://icloud.com`, `somerecordname6`, false);
+            const asset4 = new Asset(testChecksum(`asset4`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test4`, `somekey`, testChecksum(`asset4`), `https://icloud.com`, `somerecordname4`, false);
+            const asset5 = new Asset(testChecksum(`asset5`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test5`, `somekey`, testChecksum(`asset5`), `https://icloud.com`, `somerecordname5`, false);
+            const asset6 = new Asset(testChecksum(`asset6`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test6`, `somekey`, testChecksum(`asset6`), `https://icloud.com`, `somerecordname6`, false);
             const toBeAdded = [asset1, asset2, asset3];
             const toBeDeleted = [asset4, asset5, asset6];
 

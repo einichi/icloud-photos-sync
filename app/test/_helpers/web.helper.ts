@@ -34,10 +34,8 @@ export async function sendMockedRequest(webServer: WebServer, req: iCPSMockReque
 
     // Query Parameters are not appended to the URL as expected
     if(req.queryParameters && Object.keys(req.queryParameters).length > 0) {
-        req.url += `?`
-        for(const key in req.queryParameters) {
-            req.url += `${key}=${req.queryParameters[key]}`
-        }
+        const separator = req.url.includes(`?`) ? `&` : `?`;
+        req.url += `${separator}${new URLSearchParams(req.queryParameters).toString()}`
     }
 
     const res = createResponse({req})

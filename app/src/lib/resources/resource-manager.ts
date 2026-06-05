@@ -48,6 +48,27 @@ export class ResourceManager {
      */
     _resources: iCPSResources = {} as iCPSResources;
 
+    private getLogger(): Resources.Types.Logger {
+        const noop = () => undefined;
+        const noopLogger = {
+            log: noop,
+            debug: noop,
+            info: noop,
+            warn: noop,
+            error: noop,
+        };
+
+        if (!Resources._instances?.event) {
+            return noopLogger;
+        }
+
+        try {
+            return Resources.logger(this);
+        } catch (_err) {
+            return noopLogger;
+        }
+    }
+
     /**
      * Creates the resource manager, based on the previously parsed iCPSAppOptions.
      * Should not be called directly, but through the static setup function.
@@ -58,11 +79,12 @@ export class ResourceManager {
         const resourceFile = this._readResourceFile();
         // Assign app options & resource files to this data structure
         Object.assign(this._resources, resourceFile, removeUndefinedOptions(appOptions));
-        Resources.logger(this).info(`Resource manager initialized with data dir ${this.dataDir} (resource file trust token: ${resourceFile.trustToken ? `present` : `absent`}, effective trust token: ${this._resources.trustToken ? `present` : `absent`})`);
+        const logger = this.getLogger();
+        logger.info(`Resource manager initialized with data dir ${this.dataDir} (resource file trust token: ${resourceFile.trustToken ? `present` : `absent`}, effective trust token: ${this._resources.trustToken ? `present` : `absent`})`);
 
         // If trustToken should be refreshed, we clear it now
         if(this._resources.refreshToken) {
-            Resources.logger(this).warn(`Refresh token option is enabled; clearing stored iCloud trust token`);
+            logger.warn(`Refresh token option is enabled; clearing stored iCloud trust token`);
             this._resources.trustToken = undefined
             this._resources.trustTokenCreatedAt = undefined
         } else if (this._resources.trustToken && !this._resources.trustTokenCreatedAt) {

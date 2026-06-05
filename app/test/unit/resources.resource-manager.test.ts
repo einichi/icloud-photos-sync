@@ -496,9 +496,9 @@ describe(`ResourceManager`, () => {
                 resourceManager._readResourceFile = jest.fn<typeof resourceManager._readResourceFile>()
                     .mockReturnValue({
                         libraryVersion: 1,
-                        trustToken: resources.trustToken,
+                        trustToken: Config.trustToken,
                     });
-                expect(resourceManager.trustToken).toEqual(resources.trustToken);
+                expect(resourceManager.trustToken).toEqual(Config.trustToken);
                 expect(resourceManager._readResourceFile).toHaveBeenCalled();
             });
 

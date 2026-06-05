@@ -17,6 +17,8 @@ let mockedValidator: MockedValidator;
 let mockedResourceManager: MockedResourceManager;
 let mockedState: StateManager
 
+const formattedTestDate = (date: Date) => date.toLocaleString();
+
 beforeEach(() => {
     const mockedResources = prepareResources()!
     mockedEventManager = mockedResources.event;
@@ -1019,7 +1021,7 @@ describe.each([
                 expect(getByTestId(site.body, `progress-bar`)).not.toBeVisible();
 
                 expect(getByTestId(site.body, `next-sync-text`)).toBeVisible();
-                expect(getByTestId(site.body, `next-sync-text`)).toHaveTextContent(`Next sync scheduled at1/1/1970, 12:00:01 AM`);
+                expect(getByTestId(site.body, `next-sync-text`)).toHaveTextContent(`Next sync scheduled at${formattedTestDate(new Date(1000))}`);
             })
 
             test(`Handle 'ready' without credentials`, async () => {
@@ -1090,7 +1092,7 @@ describe.each([
                 expect(getByTestId(site.body, `reauth-button`)).toBeVisible();
 
                 expect(getByTestId(site.body, `state-text`)).toBeVisible();
-                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Last sync failed at1/1/1970, 12:00:01 AMUNKNOWN: Unknown error occurred caused by test`);
+                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Last sync failed at${formattedTestDate(new Date(1000))}UNKNOWN: Unknown error occurred caused by test`);
 
                 expect(getByTestId(site.body, `progress-bar`)).not.toBeVisible();
 
@@ -1117,7 +1119,7 @@ describe.each([
                 expect(getByTestId(site.body, `reauth-button`)).toBeVisible();
 
                 expect(getByTestId(site.body, `state-text`)).toBeVisible();
-                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Last auth failed at1/1/1970, 12:00:01 AMUNKNOWN: Unknown error occurred caused by test`);
+                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Last auth failed at${formattedTestDate(new Date(1000))}UNKNOWN: Unknown error occurred caused by test`);
 
                 expect(getByTestId(site.body, `progress-bar`)).not.toBeVisible();
 
@@ -1144,12 +1146,12 @@ describe.each([
                 expect(getByTestId(site.body, `reauth-button`)).toBeVisible();
 
                 expect(getByTestId(site.body, `state-text`)).toBeVisible();
-                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Last sync successful at1/1/1970, 12:00:01 AM`);
+                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Last sync successful at${formattedTestDate(new Date(1000))}`);
 
                 expect(getByTestId(site.body, `progress-bar`)).not.toBeVisible();
 
                 expect(getByTestId(site.body, `next-sync-text`)).toBeVisible();
-                expect(getByTestId(site.body, `next-sync-text`)).toHaveTextContent(`Next sync scheduled at1/1/1970, 12:00:01 AM`);
+                expect(getByTestId(site.body, `next-sync-text`)).toHaveTextContent(`Next sync scheduled at${formattedTestDate(new Date(1000))}`);
             })
 
             test(`Handle 'running' state`, async () => {
@@ -1179,12 +1181,12 @@ describe.each([
             test(`Handle 'running' asset progress detail`, async () => {
                 mockedEventManager.emit(iCPSEventApp.SCHEDULED_START)
                 mockedEventManager.emit(iCPSEventSyncEngine.WRITE_ASSETS, 0, 10, 0)
-                mockedEventManager.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, `IMG_3490.HEIC`)
+                mockedEventManager.emit(iCPSEventSyncEngine.WRITE_ASSET_STARTED, `IMG_3490.HEIC`)
                 await site.load(`${webBasePath}/state`)
 
                 await site.dom.window.refreshState()
 
-                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Syncing assets: 1/10IMG_3490.HEIC`);
+                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Syncing assets: 0/10`);
                 expect(site.body.querySelector(`.progress-detail`)).toHaveTextContent(`IMG_3490.HEIC`);
             })
         })

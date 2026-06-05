@@ -657,7 +657,7 @@ describe(`Log added`, () => {
             serializedMessage: {
                 level: `warn`,
                 source: `RuntimeWarning`,
-                message: `Error while verifying asset undefined: UNKNOWN: Unknown error occurred caused by Test`
+                message: `Error while writing asset undefined: UNKNOWN: Unknown error occurred caused by Test`
             } as LogMessage
         },{
             desc: `Should handle runtime warning: write album error`,

@@ -82,6 +82,7 @@ export class iCloudPhotos {
      * @emits iCPSEventPhotos.ERROR - In case of an error during setup - The iCPSError is provided as argument
      */
     async setup() {
+        this.ready.catch(() => undefined);
         this.ready = this.getReady();
 
         try {
@@ -95,7 +96,10 @@ export class iCloudPhotos {
             Resources.logger(this).debug(`Successfully gathered iCloud Photos account information`);
             Resources.emit(iCPSEventPhotos.SETUP_COMPLETED);
         } catch (err) {
-            Resources.emit(iCPSEventPhotos.ERROR, new iCPSError(ICLOUD_PHOTOS_ERR.SETUP_ERROR).addCause(err));
+            const setupError = new iCPSError(ICLOUD_PHOTOS_ERR.SETUP_ERROR).addCause(err);
+            this.ready.catch(() => undefined);
+            Resources.emit(iCPSEventPhotos.ERROR, setupError);
+            throw setupError;
         } 
         return this.ready;
     }

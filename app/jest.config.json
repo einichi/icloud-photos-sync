@@ -22,6 +22,9 @@
     "html",
     "json-summary"
   ],
+  "modulePathIgnorePatterns": [
+    "<rootDir>/build/out/"
+  ],
   "moduleNameMapper": {
     "^(\\.{1,2}/.*)\\.js$": "$1"
   }

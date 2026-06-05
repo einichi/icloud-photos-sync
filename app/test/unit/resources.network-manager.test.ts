@@ -350,7 +350,7 @@ describe(`NetworkManager`, () => {
 
             expect(networkManager._rateLimiter).toBeInstanceOf(PQueue);
             expect(networkManager._streamingCCYLimiter).toBeInstanceOf(PQueue);
-            expect(networkManager._streamingCCYLimiter.timeout).toEqual(1000 * 60 * 10);
+            expect(networkManager._downloadTimeoutMs).toEqual(1000 * 60 * 10);
         });
 
         test(`Creates a new instance with network capture enabled`, () => {
@@ -375,7 +375,7 @@ describe(`NetworkManager`, () => {
 
             expect(networkManager._rateLimiter).toBeInstanceOf(PQueue);
             expect(networkManager._streamingCCYLimiter).toBeInstanceOf(PQueue);
-            expect(networkManager._streamingCCYLimiter.timeout).toEqual(1000 * 60 * 10);
+            expect(networkManager._downloadTimeoutMs).toEqual(1000 * 60 * 10);
         });
 
         test(`Creates a new instance with china region`, () => {
@@ -400,7 +400,7 @@ describe(`NetworkManager`, () => {
 
             expect(networkManager._rateLimiter).toBeInstanceOf(PQueue);
             expect(networkManager._streamingCCYLimiter).toBeInstanceOf(PQueue);
-            expect(networkManager._streamingCCYLimiter.timeout).toEqual(1000 * 60 * 10);
+            expect(networkManager._downloadTimeoutMs).toEqual(1000 * 60 * 10);
         });
 
         test(`Creates a new instance with download timeout disabled`, () => {
@@ -426,6 +426,7 @@ describe(`NetworkManager`, () => {
             expect(networkManager._rateLimiter).toBeInstanceOf(PQueue);
             expect(networkManager._streamingCCYLimiter).toBeInstanceOf(PQueue);
             expect(networkManager._streamingCCYLimiter.timeout).toBeUndefined();
+            expect(networkManager._downloadTimeoutMs).toBeUndefined();
         });
 
         test(`Creates a new instance with download timeout set to 1`, () => {
@@ -450,7 +451,7 @@ describe(`NetworkManager`, () => {
 
             expect(networkManager._rateLimiter).toBeInstanceOf(PQueue);
             expect(networkManager._streamingCCYLimiter).toBeInstanceOf(PQueue);
-            expect(networkManager._streamingCCYLimiter.timeout).toEqual(1000 * 60 * 1);
+            expect(networkManager._downloadTimeoutMs).toEqual(1000 * 60 * 1);
         });
     });
 
@@ -1019,7 +1020,7 @@ describe(`NetworkManager`, () => {
                     // 'firing' from the CCY limiter queue
                     await (networkManager._streamingCCYLimiter.add as any).mock.calls[0][0]();
 
-                    expect(networkManager._streamingAxios.get).toHaveBeenCalledWith(url);
+                    expect(networkManager._streamingAxios.get).toHaveBeenCalledWith(url, {signal: expect.any(AbortSignal)});
                     expect(fs.existsSync(downloadPath)).toBeTruthy();
                     expect(fs.readFileSync(downloadPath, `utf8`)).toEqual(data);
                 });
