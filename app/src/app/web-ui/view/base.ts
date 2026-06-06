@@ -18,6 +18,12 @@ export abstract class View {
             <meta charset="UTF-8">
             <title>ICPS Web UI</title>
             <link rel="manifest" href="${Resources.manager().webBasePath}/manifest.json" />
+            <link rel="icon" type="image/x-icon" href="${Resources.manager().webBasePath}/favicon.ico" />
+            <link rel="icon" type="image/png" sizes="16x16" href="${Resources.manager().webBasePath}/favicon-16x16.png" />
+            <link rel="icon" type="image/png" sizes="32x32" href="${Resources.manager().webBasePath}/favicon-32x32.png" />
+            <link rel="apple-touch-icon" sizes="180x180" href="${Resources.manager().webBasePath}/apple-touch-icon.png" />
+            <meta name="msapplication-TileColor" content="#ffffff" />
+            <meta name="msapplication-TileImage" content="${Resources.manager().webBasePath}/mstile-150x150.png" />
             ${this.formatCss()}
         </head>
         <body>

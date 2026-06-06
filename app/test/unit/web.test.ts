@@ -237,6 +237,18 @@ describe.each([
             icons: [
                 {
                     purpose: `any`,
+                    sizes: `192x192`,
+                    src: `${webBasePath}/android-chrome-192x192.png`,
+                    type: `image/png`
+                },
+                {
+                    purpose: `any`,
+                    sizes: `512x512`,
+                    src: `${webBasePath}/android-chrome-512x512.png`,
+                    type: `image/png`
+                },
+                {
+                    purpose: `maskable`,
                     sizes: `512x512`,
                     src: `${webBasePath}/icon.png`,
                     type: `image/png`
@@ -265,6 +277,50 @@ describe.each([
         expect(res.getHeader(`Content-Type`)).toEqual(`image/png`)
         expect(res._getHeaders()[`content-length`]).toEqual(32480)
         expect(res._getBuffer().length).toEqual(32480)
+    })
+
+    test.each([
+        `/apple-touch-icon.png`,
+        `/apple-touch-icon-precomposed.png`,
+        `/android-chrome-192x192.png`,
+        `/android-chrome-512x512.png`,
+        `/favicon-16x16.png`,
+        `/favicon-32x32.png`,
+        `/mstile-150x150.png`
+    ])(`Serve platform icon %s`, async (iconPath) => {
+        const req = createRequest<IncomingMessage>({
+            method: `GET`,
+            url: `${webBasePath}${iconPath}`
+        })
+        const res = await sendMockedRequest(webServer, req)
+
+        expect(res._getStatusCode()).toEqual(200)
+        expect(res.getHeader(`Content-Type`)).toEqual(`image/png`)
+        expect(res._getHeaders()[`content-length`]).toEqual(32480)
+        expect(res._getBuffer().length).toEqual(32480)
+    })
+
+    test(`Serve site webmanifest`, async () => {
+        const req = createRequest<IncomingMessage>({
+            method: `GET`,
+            url: `${webBasePath}/site.webmanifest`
+        })
+        const res = await sendMockedRequest(webServer, req)
+
+        expect(res._getStatusCode()).toEqual(200)
+        expect(res.getHeader(`Content-Type`)).toEqual(`application/json`)
+    })
+
+    test(`Serve browserconfig`, async () => {
+        const req = createRequest<IncomingMessage>({
+            method: `GET`,
+            url: `${webBasePath}/browserconfig.xml`
+        })
+        const res = await sendMockedRequest(webServer, req)
+
+        expect(res._getStatusCode()).toEqual(200)
+        expect(res.getHeader(`Content-Type`)).toEqual(`application/xml`)
+        expect(res._getData()).toContain(`${webBasePath}/mstile-150x150.png`)
     })
 
     test(`Serve logo`, async () => {

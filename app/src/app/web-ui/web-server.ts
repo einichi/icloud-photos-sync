@@ -25,6 +25,7 @@ type WebServerResponse = {
     header: {
         "Content-Type": string, // eslint-disable-line
         "Content-Length"?: number, //eslint-disable-line
+        "Cache-Control"?: string, //eslint-disable-line
         Location?: string
     }, 
     body: any
@@ -71,7 +72,16 @@ export class WebServer {
             '/request-mfa': this.handleRequestMFAView.bind(this),
             '/service-worker.js': this.handleServiceWorker.bind(this),
             '/manifest.json': this.handleManifest.bind(this),
+            '/site.webmanifest': this.handleManifest.bind(this),
             '/icon.png': this.handleIcon.bind(this),
+            '/apple-touch-icon.png': this.handleIcon.bind(this),
+            '/apple-touch-icon-precomposed.png': this.handleIcon.bind(this),
+            '/android-chrome-192x192.png': this.handleIcon.bind(this),
+            '/android-chrome-512x512.png': this.handleIcon.bind(this),
+            '/favicon-16x16.png': this.handleIcon.bind(this),
+            '/favicon-32x32.png': this.handleIcon.bind(this),
+            '/mstile-150x150.png': this.handleIcon.bind(this),
+            '/browserconfig.xml': this.handleBrowserConfig.bind(this),
             '/logo.webp': this.handleLogo.bind(this),
             '/favicon.ico': this.handleFavicon.bind(this),
             '/api/state': this.handleStateRequest.bind(this),
@@ -275,6 +285,7 @@ export class WebServer {
             header: {
                 'Content-Type': `image/png`,
                 'Content-Length': iconBuffer.length,
+                'Cache-Control': `public, max-age=86400`,
             },
             body: iconBuffer
         }
@@ -300,6 +311,25 @@ export class WebServer {
                 'Content-Length': faviconBuffer.length,
             },
             body: faviconBuffer
+        }
+    }
+
+    handleBrowserConfig(): WebServerResponse {
+        const webBasePath = Resources.manager().webBasePath;
+        return {
+            code: 200,
+            header: {
+                "Content-Type": `application/xml`
+            },
+            body: `<?xml version="1.0" encoding="utf-8"?>
+<browserconfig>
+    <msapplication>
+        <tile>
+            <square150x150logo src="${webBasePath}/mstile-150x150.png"/>
+            <TileColor>#ffffff</TileColor>
+        </tile>
+    </msapplication>
+</browserconfig>`
         }
     }
 

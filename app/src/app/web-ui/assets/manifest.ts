@@ -3,6 +3,18 @@ export const manifest = (basePath: string) => {
         icons: [
             {
                 purpose: `any`,
+                sizes: `192x192`,
+                src: `${basePath}/android-chrome-192x192.png`,
+                type: `image/png`
+            },
+            {
+                purpose: `any`,
+                sizes: `512x512`,
+                src: `${basePath}/android-chrome-512x512.png`,
+                type: `image/png`
+            },
+            {
+                purpose: `maskable`,
                 sizes: `512x512`,
                 src: `${basePath}/icon.png`,
                 type: `image/png`
