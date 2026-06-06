@@ -1,16 +1,13 @@
-import {readFileSync, writeFileSync} from "fs";
-import {jsonc} from "jsonc";
 import * as path from 'path';
 import {RESOURCES_ERR} from "../../app/error/error-codes.js";
 import {iCPSError} from "../../app/error/error.js";
 import {iCPSAppOptions} from "../../app/factory.js";
-import * as PHOTOS_LIBRARY from '../photos-library/constants.js';
-import {iCPSEventRuntimeWarning} from "./events-types.js";
 import {Resources} from "./main.js";
-import {FILE_ENCODING, HAR_FILE_NAME, LIBRARY_LOCK_FILE_NAME, LOG_FILE_NAME, METRICS_FILE_NAME, PhotosAccountZone, RESOURCE_FILE_NAME, ResourceFile, iCPSResources} from "./resource-types.js";
+import {HAR_FILE_NAME, LIBRARY_LOCK_FILE_NAME, LOG_FILE_NAME, METRICS_FILE_NAME, PhotosAccountZone, RESOURCE_FILE_NAME, ResourceFile, iCPSResources} from "./resource-types.js";
 import { PushSubscription } from "./web-server-types.js";
 import webpush from 'web-push'
 import {LogLevel} from "./state-manager.js";
+import {ResourceFileStore} from "./resource-file-store.js";
 
 type AppleCredentials = {
     username: string,
@@ -47,6 +44,10 @@ export class ResourceManager {
      * The shared resources held by this instances of the icps application
      */
     _resources: iCPSResources = {} as iCPSResources;
+
+    private get resourceFileStore(): ResourceFileStore {
+        return new ResourceFileStore(this.resourceFilePath, this);
+    }
 
     private getLogger(): Resources.Types.Logger {
         const noop = () => undefined;
@@ -98,43 +99,14 @@ export class ResourceManager {
      * Reads the resource file from disk and parses it
      */
     _readResourceFile(): ResourceFile {
-        try {
-            Resources.logger(this).debug(`Reading resource file from ${this.resourceFilePath}`);
-            const resourceFileData = jsonc.parse(readFileSync(this.resourceFilePath, {encoding: FILE_ENCODING}));
-            const resourceFile = Resources.validator().validateResourceFile(resourceFileData);
-            Resources.logger(this).info(`Loaded resource file from ${this.resourceFilePath} (trust token: ${resourceFile.trustToken ? `present` : `absent`})`);
-            return resourceFile;
-        } catch (err) {
-            Resources.logger(this).warn(`Unable to load resource file from ${this.resourceFilePath}; using default resource file`);
-            Resources.emit(iCPSEventRuntimeWarning.RESOURCE_FILE_ERROR,
-                new iCPSError(RESOURCES_ERR.UNABLE_TO_READ_FILE).addCause(err));
-            return {
-                libraryVersion: PHOTOS_LIBRARY.LIBRARY_VERSION,
-                trustToken: undefined,
-            };
-        }
+        return this.resourceFileStore.read();
     }
 
     /**
      * Writes the resources to the resource file
      */
     _writeResourceFile() {
-        try {
-            const formattedResourceFile: ResourceFile = {
-                libraryVersion: this._resources.libraryVersion,
-                trustToken: this._resources.trustToken,
-                trustTokenCreatedAt: this._resources.trustTokenCreatedAt,
-                notificationVapidCredentials: this._resources.notificationVapidCredentials,
-                notificationSubscriptions: this._resources.notificationSubscriptions
-            };
-            const resourceFileData = jsonc.stringify(formattedResourceFile, null, 4);
-            Resources.logger(this).info(`Writing resource file to ${this.resourceFilePath} (trust token: ${formattedResourceFile.trustToken ? `present` : `absent`})`);
-
-            writeFileSync(this.resourceFilePath, resourceFileData, {encoding: FILE_ENCODING, flush: true});
-        } catch (err) {
-            Resources.emit(iCPSEventRuntimeWarning.RESOURCE_FILE_ERROR,
-                new iCPSError(RESOURCES_ERR.UNABLE_TO_WRITE_FILE).addCause(err));
-        }
+        this.resourceFileStore.write(this._resources);
     }
 
     /**
