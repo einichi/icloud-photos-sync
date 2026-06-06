@@ -7,9 +7,7 @@ import {Asset} from "../photos-library/model/asset.js";
 import {Album} from "../photos-library/model/album.js";
 import {MFAMethod} from "../icloud/mfa/mfa-method.js";
 import {TrustedPhoneNumber} from "./network-types.js";
-
-const ASSET_PROGRESS_UI_INTERVAL = 10;
-const ASSET_PROGRESS_UI_THROTTLE_THRESHOLD = 100;
+import {AssetProgressSnapshot, AssetProgressTracker} from "./asset-progress-tracker.js";
 
 export enum StateType {
     READY = `ready`,
@@ -96,18 +94,7 @@ export class StateManager {
         progress?: number
     } = {}
 
-    /**
-     * Tracking in progress assets (when relevant), in order to predict progress
-     */
-    inProgressAssets: {
-        totalAssets: number,
-        completedAssets: number,
-        activeAssetNames: string[]
-    } = {
-            totalAssets: 0,
-            completedAssets: 0,
-            activeAssetNames: []
-        }
+    private readonly assetProgressTracker = new AssetProgressTracker();
 
     trustedPhoneNumbers?: TrustedPhoneNumber[] 
 
@@ -216,26 +203,17 @@ export class StateManager {
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS, (_toBeDeletedCount: number, toBeAddedCount: number, _toBeKept: number) => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Syncing assets: 0/${toBeAddedCount}`, progress: 25});
-                this.inProgressAssets = {
-                    totalAssets: toBeAddedCount,
-                    completedAssets: 0,
-                    activeAssetNames: []
-                }
+                this.assetProgressTracker.start(toBeAddedCount);
             })
             .on(iCPSEventSyncEngine.WRITE_ASSET_STARTED, (assetName?: string) => {
-                this.addActiveAsset(assetName);
-                this.updateAssetProgress(this.getCurrentActiveAssetName(), true);
+                this.updateAssetProgress(this.assetProgressTracker.startAsset(assetName));
             })
             .on(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, (assetName?: string) => {
-                this.inProgressAssets.completedAssets++
-                this.removeActiveAsset(assetName);
-                this.updateAssetProgress(this.getCurrentActiveAssetName());
+                this.updateAssetProgress(this.assetProgressTracker.finishAsset(assetName));
             })
             .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, (_err?: Error, asset?: Asset) => {
                 const assetName = this.getAssetDisplayName(asset);
-                this.inProgressAssets.completedAssets++
-                this.removeActiveAsset(assetName);
-                this.updateAssetProgress(this.getCurrentActiveAssetName());
+                this.updateAssetProgress(this.assetProgressTracker.finishAsset(assetName));
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED, () => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Asset sync completed!`, progress: 90});
@@ -360,79 +338,19 @@ export class StateManager {
     }
 
     /**
-     * Builds an asset sync progress message.
-     * @returns A progress message
+     * Publishes asset progress to state consumers.
+     * @param snapshot - Current progress snapshot, if this update should be published
      */
-    private getAssetProgressMessage(): string {
-        return `Syncing assets: ${this.inProgressAssets.completedAssets}/${this.inProgressAssets.totalAssets}`;
-    }
-
-    /**
-     * Updates the asset progress UI state, throttling high-volume syncs to avoid flooding the Web UI.
-     * @param assetName - The current asset display name
-     * @param force - True if this progress update should be published even when progress counts are throttled
-     */
-    private updateAssetProgress(assetName?: string, force: boolean = false) {
-        if (!force && !this.shouldPublishAssetProgress()) {
+    private updateAssetProgress(snapshot?: AssetProgressSnapshot) {
+        if (!snapshot) {
             return;
         }
 
-        const inProgressPercentage = this.inProgressAssets.totalAssets > 0
-            ? this.inProgressAssets.completedAssets/this.inProgressAssets.totalAssets
-            : 1;
         this.updateState(StateType.RUNNING, {
-            progressMsg: this.getAssetProgressMessage(),
-            progressDetail: assetName,
-            progress: 25 + (inProgressPercentage * 65)
+            progressMsg: snapshot.message,
+            progressDetail: snapshot.detail,
+            progress: snapshot.progress
         });
-    }
-
-    /**
-     * Marks an asset as actively downloading.
-     * @param assetName - The asset display name
-     */
-    private addActiveAsset(assetName?: string) {
-        if (!assetName) {
-            return;
-        }
-
-        this.inProgressAssets.activeAssetNames.push(assetName);
-    }
-
-    /**
-     * Removes one completed or failed asset from the active download list.
-     * @param assetName - The asset display name
-     */
-    private removeActiveAsset(assetName?: string) {
-        if (!assetName) {
-            return;
-        }
-
-        const activeIndex = this.inProgressAssets.activeAssetNames.lastIndexOf(assetName);
-        if (activeIndex >= 0) {
-            this.inProgressAssets.activeAssetNames.splice(activeIndex, 1);
-        }
-    }
-
-    /**
-     * Gets the most recently started asset that is still actively downloading.
-     * @returns The current active asset name, if any
-     */
-    private getCurrentActiveAssetName(): string | undefined {
-        return this.inProgressAssets.activeAssetNames[this.inProgressAssets.activeAssetNames.length - 1];
-    }
-
-    /**
-     * @returns True when asset progress should be published to state consumers
-     */
-    private shouldPublishAssetProgress(): boolean {
-        if (this.inProgressAssets.totalAssets <= ASSET_PROGRESS_UI_THROTTLE_THRESHOLD) {
-            return true;
-        }
-
-        return this.inProgressAssets.completedAssets === 1
-            || this.inProgressAssets.completedAssets === this.inProgressAssets.totalAssets
-            || this.inProgressAssets.completedAssets % ASSET_PROGRESS_UI_INTERVAL === 0;
     }
 
     /**
@@ -478,11 +396,7 @@ export class StateManager {
         this.prevTrigger = trigger;
         this.prevError = undefined;
         this.log = []
-        this.inProgressAssets = {
-            totalAssets: 0,
-            completedAssets: 0,
-            activeAssetNames: []
-        }
+        this.assetProgressTracker.reset();
         this.updateState(StateType.RUNNING, {progress: 0, progressMsg: `Starting ${trigger}...`})
     }
 

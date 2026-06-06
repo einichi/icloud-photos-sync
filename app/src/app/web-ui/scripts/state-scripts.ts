@@ -98,6 +98,23 @@ function setRunningStateText(text, detail) {
     document.querySelector("#state-text").innerHTML = safeText + safeDetail;
 }
 
+function formatInlineError(message) {
+    return "<span style='color: red; font-weight: bold'>" + escapeHtml(message) + "</span>";
+}
+
+function formatReadyFailureText(state) {
+    return "Last " + (state.prevTrigger ?? "operation") + " failed at<br/>" +
+        formatDate(state.timestamp) +
+        "<br/><br/>" +
+        formatInlineError(state.prevError.message);
+}
+
+function formatReadySuccessText(state) {
+    return "Last " + (state.prevTrigger ?? "operation") + " successful at<br/>" +
+        formatDate(state.timestamp) +
+        formatTokenExpiry(state);
+}
+
 function formatTokenExpiry(state) {
     if (!state.trustTokenExpiresAt) {
         return "";
@@ -178,13 +195,7 @@ function updateState(state) {
 
             // If there was an error reported, show it
             if(state.prevError) {
-                setStateText("Last " + (state.prevTrigger ?? "operation") + " failed at<br/>" +
-                    formatDate(state.timestamp) + 
-                    "<br/><br/>" +
-                    "<span style='color: red; font-weight: bold'>" +
-                        state.prevError.message +
-                    "</span>"
-                )
+                setStateText(formatReadyFailureText(state))
                 enableSymbol('error')
                 return
             } 
@@ -196,10 +207,7 @@ function updateState(state) {
                 return
             }
 
-            setStateText("Last " + (state.prevTrigger ?? "operation") + " successful at<br/>" +
-                formatDate(state.timestamp) +
-                formatTokenExpiry(state)
-            )
+            setStateText(formatReadySuccessText(state))
             return;
         case 'blocked': 
             navigate('${basePath}/submit-mfa')
