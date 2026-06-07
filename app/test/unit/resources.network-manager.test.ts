@@ -1076,6 +1076,59 @@ describe(`NetworkManager`, () => {
 
                     expect(networkManager._streamingAxios.get).not.toHaveBeenCalled();
                 });
+
+                test(`Download timeout resets when the stream reports progress`, async () => {
+                    jest.useFakeTimers();
+                    try {
+                        networkManager._downloadTimeoutMs = 100;
+
+                        const downloadPromise = (networkManager as any).runDownloadWithTimeout(async (_signal: AbortSignal, reportProgress: () => void) => {
+                            await new Promise(resolve => setTimeout(resolve, 75));
+                            reportProgress();
+                            await new Promise(resolve => setTimeout(resolve, 75));
+                            reportProgress();
+                            await new Promise(resolve => setTimeout(resolve, 75));
+                        }, () => ({
+                            destination: `large.mov`,
+                            stage: `writing response stream to disk`,
+                            elapsedMs: 225,
+                            bytesReceived: 2,
+                            expectedBytes: 3,
+                        }));
+
+                        await jest.advanceTimersByTimeAsync(250);
+                        await expect(downloadPromise).resolves.toBeUndefined();
+                    } finally {
+                        jest.useRealTimers();
+                    }
+                });
+
+                test(`Download timeout rejects when the stream makes no progress`, async () => {
+                    jest.useFakeTimers();
+                    try {
+                        networkManager._downloadTimeoutMs = 100;
+
+                        const downloadPromise = (networkManager as any).runDownloadWithTimeout(async (signal: AbortSignal) => {
+                            await new Promise((_resolve, reject) => {
+                                signal.addEventListener(`abort`, () => reject(new Error(`aborted`)), {once: true});
+                            });
+                        }, () => ({
+                            destination: `stalled.mov`,
+                            stage: `writing response stream to disk`,
+                            elapsedMs: 100,
+                            bytesReceived: 123,
+                            expectedBytes: 456,
+                        }));
+
+                        const handledDownloadPromise = downloadPromise.catch((error: Error) => error);
+                        await jest.advanceTimersByTimeAsync(101);
+                        const err = await handledDownloadPromise;
+                        expect((err as any).getDescription()).toContain(`timed out after 100ms without download progress while writing response stream to disk`);
+                        expect((err as any).getDescription()).toContain(`received 123 byte(s) of 456`);
+                    } finally {
+                        jest.useRealTimers();
+                    }
+                });
             });
         });
     });

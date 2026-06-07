@@ -219,7 +219,7 @@ export class NetworkManager {
     _streamingCCYLimiter: PQueue;
 
     /**
-     * Timeout applied to an active streaming download task.
+     * Timeout applied when an active streaming download makes no progress.
      */
     _downloadTimeoutMs?: number;
 
@@ -510,7 +510,9 @@ export class NetworkManager {
         await this._streamingCCYLimiter.add(async () => {
             const downloadStartedAt = Date.now();
             let stage = `checking destination file`;
-            await this.runDownloadWithTimeout(async signal => {
+            let bytesReceived = 0;
+            let expectedBytes: number | undefined;
+            await this.runDownloadWithTimeout(async (signal, reportProgress) => {
                 const locationExists = await fs.stat(location)
                     .then(() => true)
                     .catch(() => false);
@@ -523,6 +525,8 @@ export class NetworkManager {
                 stage = `requesting response stream from iCloud`;
                 Resources.logger(this).debug(`Starting download for ${displayName ?? path.basename(location)}`);
                 const response = await this._streamingAxios.get(url, {signal});
+                const contentLengthHeader = response.headers?.[`content-length`];
+                expectedBytes = typeof contentLengthHeader === `string` ? Number.parseInt(contentLengthHeader, 10) : undefined;
 
                 stage = `writing response stream to disk`;
                 Resources.logger(this).debug(`Starting to write ${displayName ?? path.basename(location)} to ${location}`);
@@ -534,6 +538,10 @@ export class NetworkManager {
                 };
 
                 signal.addEventListener(`abort`, abortHandler, {once: true});
+                response.data.on(`data`, (chunk: unknown) => {
+                    bytesReceived += this.getChunkByteLength(chunk);
+                    reportProgress();
+                });
                 try {
                     response.data.pipe(writeStream);
                     await pEvent(writeStream, `finish`, {rejectionEvents: [`error`]});
@@ -547,6 +555,8 @@ export class NetworkManager {
                 destination: path.basename(location),
                 stage,
                 elapsedMs: Date.now() - downloadStartedAt,
+                bytesReceived,
+                expectedBytes: Number.isFinite(expectedBytes) ? expectedBytes : undefined,
             }));
         });
     }
@@ -556,22 +566,31 @@ export class NetworkManager {
      * @param task - The download task to execute
      * @param getContext - Callback returning current download context
      */
-    private async runDownloadWithTimeout(task: (signal: AbortSignal) => Promise<void>, getContext: () => DownloadTimeoutContext): Promise<void> {
+    private async runDownloadWithTimeout(task: (signal: AbortSignal, reportProgress: () => void) => Promise<void>, getContext: () => DownloadTimeoutContext): Promise<void> {
         if (this._downloadTimeoutMs === undefined) {
-            await task(new AbortController().signal);
+            await task(new AbortController().signal, () => undefined);
             return;
         }
 
         const abortController = new AbortController();
         let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-        const taskPromise = task(abortController.signal);
+        let rejectTimeout: (reason: iCPSError) => void = () => undefined;
+        const resetTimeout = () => {
+            if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+            }
+            timeoutHandle = setTimeout(() => {
+                abortController.abort();
+                rejectTimeout(this.buildDownloadTimeoutError(getContext()));
+            }, this._downloadTimeoutMs);
+        };
+
+        const taskPromise = task(abortController.signal, resetTimeout);
         taskPromise.catch(() => undefined);
 
         const timeoutPromise = new Promise<never>((_resolve, reject) => {
-            timeoutHandle = setTimeout(() => {
-                abortController.abort();
-                reject(this.buildDownloadTimeoutError(getContext()));
-            }, this._downloadTimeoutMs);
+            rejectTimeout = reject;
+            resetTimeout();
         });
 
         try {
@@ -592,10 +611,28 @@ export class NetworkManager {
         const timeoutMs = this._downloadTimeoutMs ?? 0;
         return new iCPSError(RESOURCES_ERR.DOWNLOAD_TIMEOUT)
             .addMessage(context.displayName ?? context.destination)
-            .addMessage(`timed out after ${timeoutMs}ms while ${context.stage}`)
+            .addMessage(`timed out after ${timeoutMs}ms without download progress while ${context.stage}`)
             .addMessage(`elapsed ${context.elapsedMs}ms`)
+            .addMessage(`received ${context.bytesReceived} byte(s)${context.expectedBytes === undefined ? `` : ` of ${context.expectedBytes}`}`)
             .addMessage(`destination ${context.destination}`)
             .addMessage(`download workers running ${this._streamingCCYLimiter.pending}, waiting ${this._streamingCCYLimiter.size}`);
+    }
+
+    /**
+     * Gets the byte length of a stream chunk for download progress diagnostics.
+     * @param chunk - Stream chunk emitted by the response body
+     * @returns Number of bytes represented by the chunk
+     */
+    private getChunkByteLength(chunk: unknown): number {
+        if (typeof chunk === `string`) {
+            return Buffer.byteLength(chunk);
+        }
+
+        if (chunk instanceof Uint8Array) {
+            return chunk.byteLength;
+        }
+
+        return 0;
     }
 }
 
@@ -603,5 +640,7 @@ type DownloadTimeoutContext = {
     displayName?: string,
     destination: string,
     stage: string,
-    elapsedMs: number
+    elapsedMs: number,
+    bytesReceived: number,
+    expectedBytes?: number
 }

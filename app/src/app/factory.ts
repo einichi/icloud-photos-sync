@@ -195,7 +195,7 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
             .env(`DOWNLOAD_THREADS`)
             .default(5)
             .argParser(commanderParsePositiveIntOrInfinity))
-        .addOption(new Option(`--download-timeout <number>`, `Sets the timeout (in minutes) for downloading assets, because downloads sometimes hang. Should be increased on slower connections and/or if there are large assets in the library (\`Infinity\` will remove the timeout).`)
+        .addOption(new Option(`--download-timeout <number>`, `Sets how many minutes an asset download may make no progress before being treated as hung (\`Infinity\` will remove the timeout).`)
             .env(`DOWNLOAD_TIMEOUT`)
             .default(10)
             .argParser(commanderParsePositiveIntOrInfinity))

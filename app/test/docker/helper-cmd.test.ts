@@ -49,11 +49,9 @@ Options:
                                    threads (\`Infinity\` will remove all
                                    limitations). (default: 5, env:
                                    DOWNLOAD_THREADS)
-  --download-timeout <number>      Sets the timeout (in minutes) for downloading
-                                   assets, because downloads sometimes hang.
-                                   Should be increased on slower connections
-                                   and/or if there are large assets in the
-                                   library (\`Infinity\` will remove the timeout).
+  --download-timeout <number>      Sets how many minutes an asset download may
+                                   make no progress before being treated as hung
+                                   (\`Infinity\` will remove the timeout).
                                    (default: 10, env: DOWNLOAD_TIMEOUT)
   -S, --schedule <cron-string>     In case this app is executed in daemon mode,
                                    it will use this cron schedule to perform
