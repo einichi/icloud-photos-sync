@@ -431,6 +431,40 @@ describe(`Handle processing queue`, () => {
             expect(writeAssetCompleteEvent).not.toHaveBeenCalled();
         });
 
+        test(`Only keeping verifies local assets`, async () => {
+            const asset1 = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
+            asset1.verify = jest.fn<typeof asset1.verify>()
+                .mockResolvedValue(true);
+            const asset2 = new Asset(testChecksum(`asset2`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, testChecksum(`asset2`), `https://icloud.com`, `somerecordname2`, false);
+            asset2.verify = jest.fn<typeof asset2.verify>()
+                .mockResolvedValue(true);
+
+            await syncEngine.writeAssets([[], [], [asset1, asset2]]);
+
+            expect(asset1.verify).toHaveBeenCalledTimes(1);
+            expect(asset2.verify).toHaveBeenCalledTimes(1);
+            expect(syncEngine.photosLibrary.deleteAsset).not.toHaveBeenCalled();
+            expect(syncEngine.icloud.photos.downloadAsset).not.toHaveBeenCalled();
+            expect(writeAssetCompleteEvent).not.toHaveBeenCalled();
+            expect(writeAssetErrorEvent).not.toHaveBeenCalled();
+        });
+
+        test(`Redownloads kept asset that fails verification`, async () => {
+            const asset = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
+            asset.verify = jest.fn<typeof asset.verify>()
+                .mockRejectedValueOnce(new Error(`checksum error`))
+                .mockResolvedValueOnce(true);
+
+            await syncEngine.writeAssets([[], [], [asset]]);
+
+            expect(asset.verify).toHaveBeenCalledTimes(2);
+            expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledWith(asset);
+            expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetCompleteEvent).toHaveBeenCalledWith(`test1-edited.png`);
+            expect(writeAssetErrorEvent).not.toHaveBeenCalled();
+        });
+
         test(`Only adding`, async () => {
             const asset1 = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
             asset1.verify = jest.fn<typeof asset1.verify>();

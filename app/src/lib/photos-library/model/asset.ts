@@ -9,6 +9,7 @@ import {LIBRARY_ERR} from '../../../app/error/error-codes.js';
 import {Zones} from '../../icloud/icloud-photos/query-builder.js';
 import {PRIMARY_ASSET_DIR, SHARED_ASSET_DIR} from '../constants.js';
 import {Resources} from '../../resources/main.js';
+import {AssetChecksum} from '../asset-checksum.js';
 
 /**
  * Representing the possible asset types
@@ -253,6 +254,12 @@ export class Asset implements PEntity<Asset> {
                 .addContext(`out-of-range`, fileStat.mtimeMs - this.modified);
         }
 
+        const localChecksum = await AssetChecksum.forFile(filePath);
+        if (localChecksum !== this.fileChecksum) {
+            throw new iCPSError(LIBRARY_ERR.ASSET_CHECKSUM)
+                .addMessage(`${filePath} checksum ${localChecksum}, iCloud ${this.fileChecksum}`);
+        }
+
         return true;
     }
 
@@ -267,86 +274,6 @@ export class Asset implements PEntity<Asset> {
         return x >= y - range
             && x <= y + range;
     }
-
-    /**
-     * Verifies the checksum of this file against the checksum stored in this object
-     * This is currently NOT implemented, as the checksum algorithm is unknown.
-     * @param file - The read file
-     * @returns True if checksum matches
-     */
-    /*
-    private verifyChecksum(file: Buffer): boolean {
-        return file !== undefined;
-        Const hashes = [
-            `BLAKE2b512`,
-            `BLAKE2s256`,
-            // `MD4`,
-            `MD5`,
-            `MD6`,
-            `MD5-SHA1`,
-            //`RIPEMD160`,
-            `SHA1`,
-            `SHA224`,
-            `SHA256`,
-            `SHA3-224`,
-            `SHA3-256`,
-            `SHA3-384`,
-            `SHA3-512`,
-            `SHA384`,
-            `SHA512`,
-            `SHA512-224`,
-            `SHA512-256`,
-            // `SHAKE128`,
-            // `SHAKE256`,
-            `SM3`,
-            // `whirlpool`,
-        ];
-        const encodings = [
-        //    `ascii`,
-        //    `utf8`,
-        //    `utf-8`,
-        //    `utf16le`,
-        //    `ucs2`,
-        //    `ucs-2`,
-            `base64`,
-            `base64url`,
-            //    `latin1`,
-            //    `binary`,
-            // `hex`,
-        ];
-        const key = Buffer.from(this.wrappingKey);// , `base64`);
-        hashes.forEach(hash => {
-            encodings.forEach(encoding => {
-                if (Buffer.isEncoding(encoding)) {
-                    try {
-                        const hmacChecksum = crypto.createHmac(hash, key)
-                            .update(file)
-                            .digest()
-                            .toString(encoding);
-
-                        const checksum = crypto.createHash(hash)
-                            .update(file)
-                            .digest()
-                            .toString(encoding);
-
-                        if (checksum.includes(this.fileChecksum)) {
-                            console.log(`MATCH:     ${checksum} - ${hash}/${encoding}`);
-                        } else {
-                            console.log(`NO match:  ${checksum} - ${hash}/${encoding}`);
-                        }
-
-                        if (hmacChecksum.includes(this.fileChecksum)) {
-                            console.log(`MATCH:     ${hmacChecksum} - ${hash}/${encoding}`);
-                        } else {
-                            console.log(`NO match:  ${hmacChecksum} - ${hash}/${encoding}`);
-                        }
-                    } catch (error) {
-                        console.log(`Problem with ${encoding} + ${hash}: ${error.message}`);
-                    }
-                }
-            });
-        });
-    } */
 
     /**
      *
