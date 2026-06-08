@@ -14,6 +14,8 @@ export class CLIInterface {
      */
     progressBar: SingleBar;
 
+    private nextLocalAssetVerificationProgressLogPercent = 10;
+
     /**
      * Creates a new CLI interface based on the provided components
      */
@@ -188,7 +190,28 @@ export class CLIInterface {
                 this.print(chalk.green(`Diffing completed!`));
             })
             .on(iCPSEventSyncEngine.WRITE, () => {
+                this.nextLocalAssetVerificationProgressLogPercent = 10;
                 this.print(chalk.white(`Preparing local changes...`));
+            })
+            .on(iCPSEventSyncEngine.VERIFY_LOCAL_ASSETS_PROGRESS, (checkedCount: number, totalCount: number) => {
+                if (totalCount === 0) {
+                    return;
+                }
+
+                if (checkedCount === 0) {
+                    this.print(chalk.white(`Verifying local asset checksums for ${totalCount} kept assets...`));
+                    return;
+                }
+
+                const progressLogPercent = this.getProgressLogPercent(
+                    checkedCount,
+                    totalCount,
+                    this.nextLocalAssetVerificationProgressLogPercent,
+                );
+                if (progressLogPercent !== undefined) {
+                    this.print(chalk.white(`Local checksum verification progress: ${progressLogPercent}% (${checkedCount}/${totalCount})`));
+                    this.nextLocalAssetVerificationProgressLogPercent = progressLogPercent + 10;
+                }
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS, (toBeDeletedCount: number, toBeAddedCount: number, toBeKept: number) => {
                 this.print(chalk.cyan(`Syncing assets, by keeping ${toBeKept} and removing ${toBeDeletedCount} local assets, as well as adding ${toBeAddedCount} remote assets...`));
@@ -308,5 +331,15 @@ export class CLIInterface {
      */
     getDateTime(date: Date = new Date()): string {
         return date.toLocaleString();
+    }
+
+    private getProgressLogPercent(completedCount: number, totalCount: number, nextProgressLogPercent: number): number | undefined {
+        const completedPercent = Math.floor((completedCount / totalCount) * 100);
+        const completedProgressLogPercent = Math.floor(completedPercent / 10) * 10;
+        if (completedProgressLogPercent < nextProgressLogPercent) {
+            return undefined;
+        }
+
+        return Math.min(100, completedProgressLogPercent);
     }
 }
