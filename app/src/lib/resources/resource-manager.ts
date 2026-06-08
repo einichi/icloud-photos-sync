@@ -426,6 +426,20 @@ export class ResourceManager {
     }
 
     /**
+     * @returns If scheduled syncs should checksum-verify already-present local assets
+     */
+    get scheduledChecksumVerification(): boolean {
+        return this._resources.scheduledChecksumVerification;
+    }
+
+    /**
+     * @returns Weekdays when scheduled syncs should checksum-verify already-present local assets
+     */
+    get scheduledChecksumVerificationDays(): number[] {
+        return this._resources.scheduledChecksumVerificationDays;
+    }
+
+    /**
      * @returns If the application should enable crash reporting
      */
     get enableCrashReporting(): boolean {

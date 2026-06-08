@@ -44,8 +44,12 @@ paths:
                     enum: ['sync', 'auth']
                   progressMsg:
                     type: string
+                  progressDetail:
+                    type: string
+                    description: Additional detail for the current operation, such as the current metadata page range, checksum filename, or downloading asset filename.
                   progress:
                     type: number
+                    description: Overall operation progress percentage. Long-running phases advance within their allocated portion of the overall progress range.
   /api/log:
     get:
       summary: Provides all stored log entries since the last trigger

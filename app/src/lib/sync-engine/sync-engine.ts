@@ -11,6 +11,14 @@ import {iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-
 import {AssetWriter} from './asset-writer.js';
 import {SyncRetryPolicy} from './retry-policy.js';
 
+export type SyncOptions = {
+    verifyKeptAssetChecksums: boolean
+}
+
+const DEFAULT_SYNC_OPTIONS: SyncOptions = {
+    verifyKeptAssetChecksums: true,
+};
+
 /**
  * This class handles the photos sync
  */
@@ -26,15 +34,20 @@ export class SyncEngine {
     photosLibrary: PhotosLibrary;
 
     private readonly retryPolicy = new SyncRetryPolicy();
+    private readonly options: SyncOptions;
 
     /**
      * Creates a new sync engine from the previously created objects and CLI options
      * @param icloud - The iCloud object
      * @param photosLibrary - The photos library object
      */
-    constructor(icloud: iCloud, photosLibrary: PhotosLibrary) {
+    constructor(icloud: iCloud, photosLibrary: PhotosLibrary, options: Partial<SyncOptions> = {}) {
         this.icloud = icloud;
         this.photosLibrary = photosLibrary;
+        this.options = {
+            ...DEFAULT_SYNC_OPTIONS,
+            ...options,
+        };
     }
 
     /**
@@ -291,7 +304,7 @@ export class SyncEngine {
     }
 
     private get assetWriter(): AssetWriter {
-        return new AssetWriter(this.icloud, this.photosLibrary, this);
+        return new AssetWriter(this.icloud, this.photosLibrary, this, this.options);
     }
 
     /**

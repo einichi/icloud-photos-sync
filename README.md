@@ -59,8 +59,9 @@ This application offers the following high level functionality:
     <ul>
       <li>iCloud Shared Photo Library support</li>
       <li>Support of MFA authentication through trusted devices, SMS and voice authentication - <a href="https://github.com/steilerDev/icloud-photos-sync/issues/207">Security Key Support pending, please help out if you have this use case</a>!</li>
-      <li>Enable autonomous operation, by caching of MFA trust token</li>
+      <li>Enable autonomous operation by caching the MFA token, with estimated expiry visible in the Web UI</li>
       <li>Support of large libraries, through efficient diffing algorithm instead of full library pull</li>
+      <li>Checksum validation for local assets, including redownloads when a local file no longer matches iCloud's asset checksum</li>
       <li>Full iCloud Photos Library backup with all important files in their original state and edits - <a href="https://github.com/steilerDev/icloud-photos-sync/issues/121">Live Photos support pending</a></li>
     </ul>
   </p>
@@ -71,9 +72,11 @@ This application offers the following high level functionality:
   <p>
     <ul>
       <li>Checking the sync status</li>
+      <li>Entering Apple ID credentials after startup without writing them to disk</li>
       <li>Triggering ad-hoc sync</li>
+      <li>Viewing detailed sync progress, including current metadata fetch, checksum verification, and asset filename</li>
       <li>Entering MFA code, when needed</li>
-      <li>Receiving Push Notification about the synchronization status</li>
+      <li>Receiving browser push notifications or optional SMTP email reminders about authentication status</li>
     </ul>
   </p>
 </details>

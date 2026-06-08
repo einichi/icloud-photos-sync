@@ -13,6 +13,8 @@ export const defaultConfig = {
     downloadThreads: 5,
     downloadTimeout: 10,
     schedule: `0 2 * * *`,
+    scheduledChecksumVerification: true,
+    scheduledChecksumVerificationDays: [0, 1, 2, 3, 4, 5, 6],
     enableCrashReporting: false,
     mfaTimeout: 600,
     force: false,

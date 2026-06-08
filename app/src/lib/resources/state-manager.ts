@@ -9,6 +9,16 @@ import {MFAMethod} from "../icloud/mfa/mfa-method.js";
 import {TrustedPhoneNumber} from "./network-types.js";
 import {AssetProgressSnapshot, AssetProgressTracker} from "./asset-progress-tracker.js";
 
+const SYNC_PROGRESS = {
+    FETCH_LOAD_START: 16,
+    REMOTE_METADATA_FETCH_END: 20,
+    FETCH_LOAD_END: 23,
+    VERIFY_LOCAL_ASSETS_START: 25,
+    VERIFY_LOCAL_ASSETS_END: 55,
+    WRITE_ASSETS_START: 55,
+    WRITE_ASSETS_END: 90,
+};
+
 export enum StateType {
     READY = `ready`,
     RUNNING = `running`,
@@ -180,7 +190,7 @@ export class StateManager {
                 this.updateState(StateType.RUNNING, {
                     progressMsg: `Loading local & fetching remote iCloud Library state...`,
                     progressDetail: `Starting local library load and remote metadata fetch...`,
-                    progress: 16
+                    progress: SYNC_PROGRESS.FETCH_LOAD_START
                 });
             })
             .on(iCPSEventSyncEngine.FETCH_N_LOAD_PROGRESS, (detail: string, progress?: number) => {
@@ -190,7 +200,7 @@ export class StateManager {
                 this.updateFetchAndLoadDetail(detail);
             })
             .on(iCPSEventSyncEngine.FETCH_N_LOAD_COMPLETED, (remoteAssetCount: number, remoteAlbumCount: number, localAssetCount: number, localAlbumCount: number) => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Loaded local (${localAssetCount} assets in ${localAlbumCount} albums) & remote state (${remoteAssetCount} assets in ${remoteAlbumCount} albums)`, progress: 23});
+                this.updateState(StateType.RUNNING, {progressMsg: `Loaded local (${localAssetCount} assets in ${localAlbumCount} albums) & remote state (${remoteAssetCount} assets in ${remoteAlbumCount} albums)`, progress: SYNC_PROGRESS.FETCH_LOAD_END});
             })
             .on(iCPSEventSyncEngine.DIFF, () => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Diffing remote with local state...`, progress: 24});
@@ -205,12 +215,12 @@ export class StateManager {
                 this.updateState(StateType.RUNNING, {
                     progressMsg: `Verifying local asset checksums: ${checkedCount}/${totalCount}`,
                     progressDetail: assetName,
-                    progress: 25,
+                    progress: this.getProgressInRange(checkedCount, totalCount, SYNC_PROGRESS.VERIFY_LOCAL_ASSETS_START, SYNC_PROGRESS.VERIFY_LOCAL_ASSETS_END),
                 });
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS, (_toBeDeletedCount: number, toBeAddedCount: number, _toBeKept: number) => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Syncing assets: 0/${toBeAddedCount}`, progress: 25});
-                this.assetProgressTracker.start(toBeAddedCount);
+                this.updateState(StateType.RUNNING, {progressMsg: `Syncing assets: 0/${toBeAddedCount}`, progress: SYNC_PROGRESS.WRITE_ASSETS_START});
+                this.assetProgressTracker.start(toBeAddedCount, SYNC_PROGRESS.WRITE_ASSETS_START, SYNC_PROGRESS.WRITE_ASSETS_END);
             })
             .on(iCPSEventSyncEngine.WRITE_ASSET_STARTED, (assetName?: string) => {
                 this.updateAssetProgress(this.assetProgressTracker.startAsset(assetName));
@@ -223,7 +233,7 @@ export class StateManager {
                 this.updateAssetProgress(this.assetProgressTracker.finishAsset(assetName));
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED, () => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Asset sync completed!`, progress: 90});
+                this.updateState(StateType.RUNNING, {progressMsg: `Asset sync completed!`, progress: SYNC_PROGRESS.WRITE_ASSETS_END});
             })
             .on(iCPSEventSyncEngine.WRITE_ALBUMS, () => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Syncing albums...`, progress: 91});
@@ -373,8 +383,54 @@ export class StateManager {
         this.updateState(StateType.RUNNING, {
             progressMsg: this.inProgressContext.message,
             progressDetail: detail,
-            progress: progress ?? this.inProgressContext.progress
+            progress: progress ?? this.parseFetchAndLoadProgress(detail) ?? this.inProgressContext.progress
         });
+    }
+
+    /**
+     * Parses known iCloud Photos fetch detail strings into the fetch/load phase progress range.
+     * @param detail - Human-readable fetch/load detail
+     * @returns Overall progress percentage if the detail includes countable work
+     */
+    private parseFetchAndLoadProgress(detail: string): number | undefined {
+        const pageRangeMatch = detail.match(/pages \d+-(\d+)\/(\d+)/);
+        if (pageRangeMatch) {
+            return this.getProgressInRange(
+                Number.parseInt(pageRangeMatch[1], 10),
+                Number.parseInt(pageRangeMatch[2], 10),
+                SYNC_PROGRESS.FETCH_LOAD_START,
+                SYNC_PROGRESS.REMOTE_METADATA_FETCH_END,
+            );
+        }
+
+        const pageBatchMatch = detail.match(/(\d+)\/(\d+) page batches/);
+        if (pageBatchMatch) {
+            return this.getProgressInRange(
+                Number.parseInt(pageBatchMatch[1], 10),
+                Number.parseInt(pageBatchMatch[2], 10),
+                SYNC_PROGRESS.FETCH_LOAD_START,
+                SYNC_PROGRESS.REMOTE_METADATA_FETCH_END,
+            );
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Maps phase-local completion into the overall sync progress range.
+     * @param completed - Completed units within the phase
+     * @param total - Total units within the phase
+     * @param start - Overall progress percentage at phase start
+     * @param end - Overall progress percentage at phase completion
+     * @returns Overall progress percentage
+     */
+    private getProgressInRange(completed: number, total: number, start: number, end: number): number {
+        if (total <= 0) {
+            return end;
+        }
+
+        const ratio = Math.max(0, Math.min(completed / total, 1));
+        return Math.round((start + (ratio * (end - start))) * 100) / 100;
     }
 
     /**

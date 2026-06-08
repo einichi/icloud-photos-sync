@@ -14,6 +14,8 @@ export class AssetProgressTracker {
     private totalAssets = 0;
     private completedAssets = 0;
     private activeAssetNames: string[] = [];
+    private progressStart = 25;
+    private progressEnd = 90;
 
     /**
      * Resets all progress counters.
@@ -27,11 +29,15 @@ export class AssetProgressTracker {
     /**
      * Starts a new asset sync run.
      * @param totalAssets - Number of assets expected to be added
+     * @param progressStart - Overall progress percentage at the start of this phase
+     * @param progressEnd - Overall progress percentage at the end of this phase
      */
-    start(totalAssets: number) {
+    start(totalAssets: number, progressStart = 25, progressEnd = 90) {
         this.totalAssets = totalAssets;
         this.completedAssets = 0;
         this.activeAssetNames = [];
+        this.progressStart = progressStart;
+        this.progressEnd = progressEnd;
     }
 
     /**
@@ -74,7 +80,7 @@ export class AssetProgressTracker {
         return {
             message: `Syncing assets: ${this.completedAssets}/${this.totalAssets}`,
             detail: this.getCurrentActiveAssetName(),
-            progress: 25 + (inProgressPercentage * 65)
+            progress: this.roundProgress(this.progressStart + (inProgressPercentage * (this.progressEnd - this.progressStart)))
         };
     }
 
@@ -101,5 +107,9 @@ export class AssetProgressTracker {
         return this.completedAssets === 1
             || this.completedAssets === this.totalAssets
             || this.completedAssets % ASSET_PROGRESS_UI_INTERVAL === 0;
+    }
+
+    private roundProgress(progress: number): number {
+        return Math.round(progress * 100) / 100;
     }
 }

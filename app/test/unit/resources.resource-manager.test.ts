@@ -803,6 +803,18 @@ describe(`ResourceManager`, () => {
             });
         });
 
+        describe(`scheduledChecksumVerification`, () => {
+            test(`should return the scheduled checksum verification flag from the resources`, () => {
+                expect(resourceManager.scheduledChecksumVerification).toEqual(resources.scheduledChecksumVerification);
+            });
+        });
+
+        describe(`scheduledChecksumVerificationDays`, () => {
+            test(`should return the scheduled checksum verification weekdays from the resources`, () => {
+                expect(resourceManager.scheduledChecksumVerificationDays).toEqual(resources.scheduledChecksumVerificationDays);
+            });
+        });
+
         describe(`enableCrashReporting`, () => {
             test(`should return the enable crash reporting flag from the resources`, () => {
                 expect(resourceManager.enableCrashReporting).toEqual(resources.enableCrashReporting);

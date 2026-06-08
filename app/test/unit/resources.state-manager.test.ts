@@ -323,7 +323,7 @@ describe(`State changes`, () => {
                 nextSync: undefined,
                 prevError: undefined,
                 prevTrigger: `sync`,
-                progress: 25,
+                progress: 37.6,
                 progressMsg: `Verifying local asset checksums: 42/100`,
                 progressDetail: `IMG_3490.HEIC`
             } as SerializedState
@@ -335,7 +335,7 @@ describe(`State changes`, () => {
                 nextSync: undefined,
                 prevError: undefined,
                 prevTrigger: `sync`,
-                progress: 25,
+                progress: 55,
                 progressMsg: `Syncing assets: 0/2`
             } as SerializedState
         },{
@@ -346,7 +346,7 @@ describe(`State changes`, () => {
                 nextSync: undefined,
                 prevError: undefined,
                 prevTrigger: `sync`,
-                progress: 31.5,
+                progress: 58.5,
                 progressMsg: `Syncing assets: 1/10`,
                 progressDetail: `IMG_3490.HEIC`
             } as SerializedState
@@ -358,7 +358,7 @@ describe(`State changes`, () => {
                 nextSync: undefined,
                 prevError: undefined,
                 prevTrigger: `sync`,
-                progress: 38,
+                progress: 62,
                 progressMsg: `Syncing assets: 2/10`
             } as SerializedState
         },{
@@ -369,7 +369,7 @@ describe(`State changes`, () => {
                 nextSync: undefined,
                 prevError: undefined,
                 prevTrigger: `sync`,
-                progress: 31.5,
+                progress: 58.5,
                 progressMsg: `Syncing assets: 1/10`
             } as SerializedState
         },{
@@ -577,7 +577,7 @@ describe(`State changes`, () => {
 
         expect(mockedState.serialize()).toEqual(expect.objectContaining({
             state: `running`,
-            progress: 16,
+            progress: 16.8,
             progressMsg: `Loading local & fetching remote iCloud Library state...`,
             progressDetail: `Fetching remote asset metadata (Primary library, All photos): pages 1-4/20, 800 raw records`
         }))

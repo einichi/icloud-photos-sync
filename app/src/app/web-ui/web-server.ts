@@ -557,7 +557,7 @@ export class WebServer {
         if (check) {
             return check;
         }
-        Resources.emit(iCPSEventWebServer.SYNC_REQUESTED); // Will run a manual trigger for the cron-job
+        Resources.emit(iCPSEventWebServer.SYNC_REQUESTED);
         return {
             code: 200,
             header: {

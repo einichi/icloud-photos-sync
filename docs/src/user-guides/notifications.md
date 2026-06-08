@@ -12,9 +12,9 @@ SMTP notifications are disabled unless the minimum SMTP settings are present. SM
 SMTP email notifications are sent for these events:
 
 - The container starts without Apple ID credentials in memory, so the user needs to authenticate through the Web UI.
-- The stored iCloud trust token is nearing expiry. Warnings are sent at most once per day while the token is inside the configured warning window.
+- The stored iCloud MFA token is nearing expiry. Warnings are sent at most once per day while the token is inside the configured warning window.
 
-The trust token expiry is estimated from the `trustTokenCreatedAt` timestamp in the `.icloud-photos-sync` resource file plus `TRUST_TOKEN_LIFETIME_DAYS`. The timestamp is created when a new token is stored; existing resource files that already have a token but no timestamp will get one automatically.
+The MFA token expiry is estimated from the `trustTokenCreatedAt` timestamp in the `.icloud-photos-sync` resource file plus `TRUST_TOKEN_LIFETIME_DAYS`. The timestamp is created when a new token is stored; existing resource files that already have a token but no timestamp will get one automatically.
 
 ### Environment Variables
 
@@ -28,8 +28,8 @@ The trust token expiry is estimated from the `trustTokenCreatedAt` timestamp in 
 | `SMTP_FROM` | unset | yes | Sender address. This can be a bare address such as `photos-sync@example.com`, or a full formatted sender such as `"iCloud Photos Sync" <photos-sync@example.com>`. |
 | `SMTP_FROM_NAME` | unset | no | Optional sender display name. This is easier in Docker Compose than embedding quotes in `SMTP_FROM`; for example `SMTP_FROM=notifications@burg.in` and `SMTP_FROM_NAME=Photo Sync` sends as `"Photo Sync" <notifications@burg.in>`. |
 | `SMTP_TO` | unset | yes | Recipient address. Multiple recipients can be comma-separated. |
-| `SMTP_TOKEN_EXPIRY_WARNING_DAYS` | `3` | no | Start sending daily trust-token expiry warning emails this many days before estimated expiry. |
-| `TRUST_TOKEN_LIFETIME_DAYS` | `30` | no | Number of days a stored trust token is considered valid for Web UI display and notification scheduling. |
+| `SMTP_TOKEN_EXPIRY_WARNING_DAYS` | `3` | no | Start sending daily MFA-token expiry warning emails this many days before estimated expiry. |
+| `TRUST_TOKEN_LIFETIME_DAYS` | `30` | no | Number of days a stored MFA token is considered valid for Web UI display and notification scheduling. |
 | `NOTIFICATION_WEB_HOST_IP` | `localhost` | no | Docker host IP to use only when rendering Web UI URLs in notification emails. This does not change the Web UI bind address. |
 | `NOTIFICATION_WEB_EXPOSED_PORT` | `PORT` | no | Docker host exposed Web UI port to use only when rendering Web UI URLs in notification emails. This is useful when Docker maps the container's internal `PORT` to a different host port. |
 

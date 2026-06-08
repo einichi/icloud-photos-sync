@@ -26,6 +26,8 @@ The `latest` tag should always represent the latest stable release, whereas the 
             environment:
               TZ: "Europe/Berlin"                                                       
               SCHEDULE: "0 2 * * *"
+              SCHEDULED_CHECKSUM_VERIFICATION: true
+              SCHEDULED_CHECKSUM_VERIFICATION_DAYS: "0,1,2,3,4,5,6"
               ENABLE_CRASH_REPORTING: true
               # Optional email notifications. See User Guides > Notifications.
               # SMTP_HOST: "smtp.example.com"
@@ -45,7 +47,10 @@ The `latest` tag should always represent the latest stable release, whereas the 
             Apple ID credentials can be supplied from the Web UI after startup. They are kept in memory only and must be entered again after every service restart. If you prefer unattended startup, set `APPLE_ID_USER` and `APPLE_ID_PWD` in the environment; those startup credentials take precedence over Web UI credentials.
 
         !!! tip "Notification emails"
-            Optional SMTP notifications can remind you to authenticate after a service restart and warn when the stored iCloud trust token is nearing expiry. See the [Notifications guide](user-guides/notifications.md) for all supported SMTP and notification URL variables.
+            Optional SMTP notifications can remind you to authenticate after a service restart and warn when the stored iCloud MFA token is nearing expiry. See the [Notifications guide](user-guides/notifications.md) for all supported SMTP and notification URL variables.
+
+        !!! tip "Scheduled checksum verification"
+            `SCHEDULED_CHECKSUM_VERIFICATION` controls whether scheduled syncs verify checksums for local assets that otherwise match iCloud metadata. It defaults to `true`. `SCHEDULED_CHECKSUM_VERIFICATION_DAYS` narrows that verification to specific numeric weekdays (`0` is Sunday, `6` is Saturday) and defaults to every day. Web UI-triggered syncs and one-off CLI syncs always verify checksums.
 
         Get the latest image by running:
 
@@ -134,11 +139,11 @@ The primary interface to interact with this application is a WebUI, however conf
 
 ### Authentication
 
-Since this application needs full access to a user's iCloud Photos Library, a full authentication with Apple (including Multi-Factor-Authentication) is initially required. While this will acquire a trust token, Apple's system requires refreshing this token every ~30 days by providing a re-authentication utilizing an MFA code.
+Since this application needs full access to a user's iCloud Photos Library, a full authentication with Apple (including Multi-Factor-Authentication) is initially required. While this will acquire an MFA token, Apple's system requires refreshing this token every ~30 days by providing a re-authentication utilizing an MFA code.
 
-The trust token is stored in the `.icloud-photos-sync` resource file together with the timestamp when it was persisted. The Web UI uses that timestamp to show an estimated time until token expiry. The estimate is controlled by `TRUST_TOKEN_LIFETIME_DAYS` and defaults to `30` days.
+The MFA token is stored in the `.icloud-photos-sync` resource file together with the timestamp when it was persisted. The Web UI uses that timestamp to show an estimated time until token expiry. The estimate is controlled by `TRUST_TOKEN_LIFETIME_DAYS` and defaults to `30` days.
 
-In order to perform authentication (without syncing any assets) to validate or acquire the trust token, navigate to the WebUI. If credentials were not supplied at startup, enter the Apple ID username and password in the Web UI first; otherwise select `Renew authentication`.
+In order to perform authentication (without syncing any assets) to validate or acquire the MFA token, navigate to the WebUI. If credentials were not supplied at startup, enter the Apple ID username and password in the Web UI first; otherwise select `Renew authentication`.
 
 ![Ready](../assets/web-ui/00_ready.png#only-light)
 ![Ready (dark mode)](../assets/web-ui/00_ready-dark.png#only-dark)
@@ -187,7 +192,7 @@ During the sync process various warning could be produced within the application
 
     Additionally you might need to limit the rate of metadata fetching, because the iCloud API has been observed to enforce rate limits, causing `SOCKET HANGUP` errors. This appears to be applicable for libraries holding more than 10.000 assets. Do this by [setting the metadata rate option](user-guides/cli.md#metadata-rate) - it seems `1/20` ensures sufficient throttling.
 
-During the sync, the WebUI will not show any detailed progress information - please check the CLI output and/or log files for more information on the sync progress.
+During the sync, the WebUI shows high-level progress and phase-specific detail. Long-running phases such as remote metadata fetching, local checksum verification, and asset downloads advance within their own portion of the overall progress bar; when an asset is being downloaded, the current filename is shown below the sync status. The CLI output and log files still provide the most detailed diagnostics if warnings or errors occur.
 
 ![Running](../assets/web-ui/05_running.png#only-light)
 ![Running (dark mode)](../assets/web-ui/05_running-dark.png#only-dark)

@@ -136,9 +136,10 @@ function formatTokenExpiry(state) {
 }
 
 function setProgress(progress) {
-    if(progress && progress >= 0) {
+    if(progress !== undefined && progress !== null && progress >= 0) {
+        const boundedProgress = Math.max(0, Math.min(progress, 100));
         document.getElementById('progress-container').style.display = "block";
-        document.getElementById('progress-bar').style.width = progress + '%';
+        document.getElementById('progress-bar').style.width = boundedProgress + '%';
     } else {
         document.getElementById('progress-container').style.display = "none";
         document.getElementById('progress-bar').style.width = '0%';

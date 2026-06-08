@@ -458,6 +458,29 @@ describe(`Handle processing queue`, () => {
             expect(writeAssetErrorEvent).not.toHaveBeenCalled();
         });
 
+        test(`Can skip checksum verification for kept local assets`, async () => {
+            syncEngine = new SyncEngine(new iCloud(), new PhotosLibrary(), {verifyKeptAssetChecksums: false});
+            syncEngine.photosLibrary.deleteAsset = jest.fn<typeof syncEngine.photosLibrary.deleteAsset>()
+                .mockResolvedValue();
+            syncEngine.icloud.photos.downloadAsset = jest.fn<typeof syncEngine.icloud.photos.downloadAsset>()
+                .mockResolvedValue();
+            const asset = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
+            asset.verify = jest.fn<typeof asset.verify>()
+                .mockRejectedValue(new Error(`checksum error`));
+
+            await syncEngine.writeAssets([[], [], [asset]]);
+
+            expect(asset.verify).not.toHaveBeenCalled();
+            expect(verifyLocalAssetsProgressEvent).not.toHaveBeenCalled();
+            expect(syncEngine.photosLibrary.deleteAsset).not.toHaveBeenCalled();
+            expect(syncEngine.icloud.photos.downloadAsset).not.toHaveBeenCalled();
+            expect(writeAssetsEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetsEvent).toHaveBeenCalledWith(0, 0, 1);
+            expect(writeAssetStartedEvent).not.toHaveBeenCalled();
+            expect(writeAssetCompleteEvent).not.toHaveBeenCalled();
+            expect(writeAssetErrorEvent).not.toHaveBeenCalled();
+        });
+
         test(`Redownloads kept asset that fails verification`, async () => {
             const asset = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
             asset.verify = jest.fn<typeof asset.verify>()

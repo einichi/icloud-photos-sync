@@ -47,7 +47,7 @@ export class DaemonApp extends iCPSApp {
             },
         );
         Resources.events(this).on(iCPSEventWebServer.SYNC_REQUESTED, async () => {
-            this.job?.trigger();
+            await this.performManualSync();
         });
         Resources.emit(iCPSEventApp.SCHEDULED, this.job?.nextRun());
     }
@@ -56,7 +56,7 @@ export class DaemonApp extends iCPSApp {
      * Perform a scheduled sync
      * @param syncApp - Parametrized for testability - will be freshly initiated if omitted
      */
-    async performScheduledSync(syncApp: SyncApp = new SyncApp()) {
+    async performScheduledSync(syncApp: SyncApp = new SyncApp({verifyKeptAssetChecksums: this.shouldVerifyScheduledChecksums()})) {
         try {
             Resources.emit(iCPSEventApp.SCHEDULED_START);
             const [remoteAssets] = await syncApp.run() as [Asset[], Album[]];
@@ -68,6 +68,20 @@ export class DaemonApp extends iCPSApp {
             Resources.emit(iCPSEventRuntimeError.SCHEDULED_ERROR, new iCPSError(APP_ERR.DAEMON).addCause(err));
             Resources.emit(iCPSEventApp.SCHEDULED_RETRY, this.job?.nextRun());
         }
+    }
+
+    /**
+     * Performs a manually requested sync from the Web UI.
+     * Manual syncs always checksum-verify kept local assets.
+     * @param syncApp - Parametrized for testability - will be freshly initiated if omitted
+     */
+    async performManualSync(syncApp: SyncApp = new SyncApp({verifyKeptAssetChecksums: true})) {
+        await this.performScheduledSync(syncApp);
+    }
+
+    private shouldVerifyScheduledChecksums(runDate: Date = new Date()): boolean {
+        return Resources.manager().scheduledChecksumVerification
+            && Resources.manager().scheduledChecksumVerificationDays.includes(runDate.getDay());
     }
 }
 
@@ -251,10 +265,10 @@ export class SyncApp extends iCloudApp {
     /**
      * Creates and sets up the necessary infrastructure for this app
      */
-    constructor() {
+    constructor(options: {verifyKeptAssetChecksums?: boolean} = {}) {
         super();
         this.photosLibrary = new PhotosLibrary();
-        this.syncEngine = new SyncEngine(this.icloud, this.photosLibrary);
+        this.syncEngine = new SyncEngine(this.icloud, this.photosLibrary, options);
     }
 
     /**

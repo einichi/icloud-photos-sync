@@ -606,6 +606,58 @@ describe(`App control flow`, () => {
             expect(successEvent).toHaveBeenCalled();
         });
 
+        test(`Scheduled sync uses configured checksum verification setting`, async () => {
+            const daemonApp = await appFactory(validOptions.daemon) as DaemonApp;
+            Resources._instances.manager._resources.scheduledChecksumVerification = false;
+            const runSpy = jest.spyOn(SyncApp.prototype, `run`)
+                .mockImplementation(function (this: SyncApp) {
+                    expect((this.syncEngine as any).options.verifyKeptAssetChecksums).toBe(false);
+                    return Promise.resolve([[{fileChecksum: `someChecksum`}] as Asset[], []]);
+                });
+
+            try {
+                await daemonApp.performScheduledSync();
+
+                expect(runSpy).toHaveBeenCalledTimes(1);
+            } finally {
+                runSpy.mockRestore();
+            }
+        });
+
+        test(`Scheduled sync verifies checksums on configured weekday`, async () => {
+            const daemonApp = await appFactory(validOptions.daemon) as DaemonApp;
+            Resources._instances.manager._resources.scheduledChecksumVerification = true;
+            Resources._instances.manager._resources.scheduledChecksumVerificationDays = [1];
+
+            expect((daemonApp as any).shouldVerifyScheduledChecksums(new Date(`2026-06-08T02:00:00`))).toBe(true);
+        });
+
+        test(`Scheduled sync skips checksums on non-configured weekday`, async () => {
+            const daemonApp = await appFactory(validOptions.daemon) as DaemonApp;
+            Resources._instances.manager._resources.scheduledChecksumVerification = true;
+            Resources._instances.manager._resources.scheduledChecksumVerificationDays = [0];
+
+            expect((daemonApp as any).shouldVerifyScheduledChecksums(new Date(`2026-06-08T02:00:00`))).toBe(false);
+        });
+
+        test(`Manual Web UI sync always verifies checksums`, async () => {
+            const daemonApp = await appFactory(validOptions.daemon) as DaemonApp;
+            Resources._instances.manager._resources.scheduledChecksumVerification = false;
+            const runSpy = jest.spyOn(SyncApp.prototype, `run`)
+                .mockImplementation(function (this: SyncApp) {
+                    expect((this.syncEngine as any).options.verifyKeptAssetChecksums).toBe(true);
+                    return Promise.resolve([[{fileChecksum: `someChecksum`}] as Asset[], []]);
+                });
+
+            try {
+                await daemonApp.performManualSync();
+
+                expect(runSpy).toHaveBeenCalledTimes(1);
+            } finally {
+                runSpy.mockRestore();
+            }
+        });
+
         test(`Scheduled sync requires MFA`, async () => {
             const daemonApp = await appFactory(validOptions.daemon) as DaemonApp;
             const successEvent = spyOnEvent(Resources._instances.event._eventBus, iCPSEventApp.SCHEDULED_DONE);

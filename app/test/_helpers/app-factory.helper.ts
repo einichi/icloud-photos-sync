@@ -225,6 +225,32 @@ export const rejectOptions = [
             `test@icloud.com`,
             `-p`,
             `testPass`,
+            `--scheduled-checksum-verification-days`,
+            `7`,
+        ],
+        _desc: `Invalid scheduled checksum verification weekday`,
+        expected: `error: option '--scheduled-checksum-verification-days <days>' argument '7' is invalid. Not a valid weekday list. Use comma-separated numbers from 0-6, where 0 is Sunday and 6 is Saturday.`,
+    }, {
+        options: [
+            `/usr/bin/node`,
+            `/home/icloud-photos-sync/main.js`,
+            `-u`,
+            `test@icloud.com`,
+            `-p`,
+            `testPass`,
+            `--scheduled-checksum-verification-days`,
+            `sun`,
+        ],
+        _desc: `Invalid scheduled checksum verification weekday name`,
+        expected: `error: option '--scheduled-checksum-verification-days <days>' argument 'sun' is invalid. Not a valid weekday list. Use comma-separated numbers from 0-6, where 0 is Sunday and 6 is Saturday.`,
+    }, {
+        options: [
+            `/usr/bin/node`,
+            `/home/icloud-photos-sync/main.js`,
+            `-u`,
+            `test@icloud.com`,
+            `-p`,
+            `testPass`,
             `--health-check-url`,
             `asdf`,
         ],
@@ -395,6 +421,36 @@ export const nonRejectOptions = [
         _desc: `Schedule set`,
         expectedOptions: {
             schedule: `0 1 10 * *`,
+        },
+    }, {
+        options: [
+            `/usr/bin/node`,
+            `/home/icloud-photos-sync/main.js`,
+            `-u`,
+            `test@icloud.com`,
+            `-p`,
+            `testPass`,
+            `--scheduled-checksum-verification`,
+            `false`,
+        ],
+        _desc: `Scheduled checksum verification disabled`,
+        expectedOptions: {
+            scheduledChecksumVerification: false,
+        },
+    }, {
+        options: [
+            `/usr/bin/node`,
+            `/home/icloud-photos-sync/main.js`,
+            `-u`,
+            `test@icloud.com`,
+            `-p`,
+            `testPass`,
+            `--scheduled-checksum-verification-days`,
+            `6,0,6`,
+        ],
+        _desc: `Scheduled checksum verification weekdays set`,
+        expectedOptions: {
+            scheduledChecksumVerificationDays: [0, 6],
         },
     }, {
         options: [

@@ -57,6 +57,18 @@ Options:
                                    it will use this cron schedule to perform
                                    regular sync operations. (default: "0 2 * *
                                    *", env: SCHEDULE)
+  --scheduled-checksum-verification <boolean>
+                                   Verify checksums of already-present local
+                                   assets during scheduled syncs. Web UI and
+                                   one-off syncs always verify checksums.
+                                   (default: true, env:
+                                   SCHEDULED_CHECKSUM_VERIFICATION)
+  --scheduled-checksum-verification-days <days>
+                                   Comma-separated cron-style weekdays when
+                                   scheduled syncs should verify checksums,
+                                   where 0 is Sunday and 6 is Saturday.
+                                   (default: 0,1,2,3,4,5,6, env:
+                                   SCHEDULED_CHECKSUM_VERIFICATION_DAYS)
   --enable-crash-reporting         Enables automatic collection of errors and
                                    crashes, see
                                    https://icps.steiler.dev/error-reporting/ for

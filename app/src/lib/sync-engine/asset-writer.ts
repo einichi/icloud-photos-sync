@@ -6,6 +6,7 @@ import {Asset} from '../photos-library/model/asset.js';
 import {PLibraryProcessingQueues} from '../photos-library/model/photos-entity.js';
 import {iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-types.js';
 import {Resources} from '../resources/main.js';
+import type {SyncOptions} from './sync-engine.js';
 
 const ASSET_PROGRESS_LOG_INTERVAL = 25;
 
@@ -17,6 +18,7 @@ export class AssetWriter {
         private readonly icloud: iCloud,
         private readonly photosLibrary: PhotosLibrary,
         private readonly logSource: object,
+        private readonly options: SyncOptions,
     ) {}
 
     /**
@@ -26,13 +28,18 @@ export class AssetWriter {
      */
     async writeAssets(processingQueue: PLibraryProcessingQueues<Asset>) {
         const toBeDeleted = processingQueue[0];
-        const invalidKeptAssets = await this.getInvalidKeptAssets(processingQueue[2]);
+        const invalidKeptAssets = this.options.verifyKeptAssetChecksums
+            ? await this.getInvalidKeptAssets(processingQueue[2])
+            : [];
         const toBeAdded = this.getUniqueAssets([
             ...processingQueue[1],
             ...invalidKeptAssets,
         ]);
         const verifiedKeptCount = processingQueue[2].length - invalidKeptAssets.length;
 
+        if (!this.options.verifyKeptAssetChecksums && processingQueue[2].length > 0) {
+            Resources.logger(this.logSource).info(`Skipping checksum verification for ${processingQueue[2].length} kept local asset(s)`);
+        }
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSETS, toBeDeleted.length, toBeAdded.length, verifiedKeptCount);
         Resources.logger(this.logSource).info(`Writing assets by deleting ${toBeDeleted.length} local asset(s), adding ${toBeAdded.length} remote asset(s), and keeping ${verifiedKeptCount} verified local asset(s)`);
 
