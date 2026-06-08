@@ -313,7 +313,19 @@ describe(`State changes`, () => {
                 prevError: undefined,
                 prevTrigger: `sync`,
                 progress: 25,
-                progressMsg: `Writing diff to disk...`
+                progressMsg: `Preparing local changes...`
+            } as SerializedState
+        },{
+            desc: `Should handle local checksum verification progress (triggered by sync)`,
+            events: [iCPSEventApp.SCHEDULED_START, [iCPSEventSyncEngine.VERIFY_LOCAL_ASSETS_PROGRESS, 42, 100, `IMG_3490.HEIC`]],
+            serializedState: {
+                state: `running`,
+                nextSync: undefined,
+                prevError: undefined,
+                prevTrigger: `sync`,
+                progress: 25,
+                progressMsg: `Verifying local asset checksums: 42/100`,
+                progressDetail: `IMG_3490.HEIC`
             } as SerializedState
         },{
             desc: `Should handle write assets (triggered by sync)`,

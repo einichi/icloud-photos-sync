@@ -199,7 +199,14 @@ export class StateManager {
                 this.updateState(StateType.RUNNING, {progressMsg: `Diffing completed!`, progress: 25});
             })
             .on(iCPSEventSyncEngine.WRITE, () => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Writing diff to disk...`, progress: 25});
+                this.updateState(StateType.RUNNING, {progressMsg: `Preparing local changes...`, progress: 25});
+            })
+            .on(iCPSEventSyncEngine.VERIFY_LOCAL_ASSETS_PROGRESS, (checkedCount: number, totalCount: number, assetName?: string) => {
+                this.updateState(StateType.RUNNING, {
+                    progressMsg: `Verifying local asset checksums: ${checkedCount}/${totalCount}`,
+                    progressDetail: assetName,
+                    progress: 25,
+                });
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS, (_toBeDeletedCount: number, toBeAddedCount: number, _toBeKept: number) => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Syncing assets: 0/${toBeAddedCount}`, progress: 25});

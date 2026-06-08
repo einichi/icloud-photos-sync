@@ -105,13 +105,19 @@ export class AssetWriter {
      */
     private async getInvalidKeptAssets(assets: Asset[]): Promise<Asset[]> {
         const invalidAssets: Asset[] = [];
-        for (const asset of assets) {
+        for (let index = 0; index < assets.length; index++) {
+            const asset = assets[index];
+            Resources.emit(iCPSEventSyncEngine.VERIFY_LOCAL_ASSETS_PROGRESS, index, assets.length, this.getAssetProgressDisplayName(asset));
             try {
                 await asset.verify();
             } catch (err) {
                 Resources.logger(this.logSource).warn(`Kept asset ${this.getAssetProgressDisplayName(asset)} failed verification and will be redownloaded: ${iCPSError.toiCPSError(err).getDescription()}`);
                 invalidAssets.push(asset);
             }
+        }
+
+        if (assets.length > 0) {
+            Resources.emit(iCPSEventSyncEngine.VERIFY_LOCAL_ASSETS_PROGRESS, assets.length, assets.length);
         }
 
         return invalidAssets;

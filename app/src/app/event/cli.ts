@@ -188,7 +188,7 @@ export class CLIInterface {
                 this.print(chalk.green(`Diffing completed!`));
             })
             .on(iCPSEventSyncEngine.WRITE, () => {
-                this.print(chalk.white(`Writing diff to disk...`));
+                this.print(chalk.white(`Preparing local changes...`));
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS, (toBeDeletedCount: number, toBeAddedCount: number, toBeKept: number) => {
                 this.print(chalk.cyan(`Syncing assets, by keeping ${toBeKept} and removing ${toBeDeletedCount} local assets, as well as adding ${toBeAddedCount} remote assets...`));

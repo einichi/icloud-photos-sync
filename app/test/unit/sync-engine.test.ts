@@ -397,6 +397,7 @@ describe(`Handle processing queue`, () => {
         let writeAssetErrorEvent: jest.Mock<UnknownFunction>;
         let writeAssetsEvent: jest.Mock<UnknownFunction>;
         let writeAssetStartedEvent: jest.Mock<UnknownFunction>;
+        let verifyLocalAssetsProgressEvent: jest.Mock<UnknownFunction>;
 
         beforeEach(() => {
             syncEngine.photosLibrary.deleteAsset = jest.fn<typeof syncEngine.photosLibrary.deleteAsset>()
@@ -408,6 +409,7 @@ describe(`Handle processing queue`, () => {
             writeAssetErrorEvent = mockedEventManager.spyOnEvent(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR);
             writeAssetsEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.WRITE_ASSETS);
             writeAssetStartedEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.WRITE_ASSET_STARTED);
+            verifyLocalAssetsProgressEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.VERIFY_LOCAL_ASSETS_PROGRESS);
         });
 
         test(`Empty processing queue`, async () => {
@@ -446,6 +448,10 @@ describe(`Handle processing queue`, () => {
 
             expect(asset1.verify).toHaveBeenCalledTimes(1);
             expect(asset2.verify).toHaveBeenCalledTimes(1);
+            expect(verifyLocalAssetsProgressEvent).toHaveBeenCalledTimes(3);
+            expect(verifyLocalAssetsProgressEvent).toHaveBeenNthCalledWith(1, 0, 2, `test1-edited.png`);
+            expect(verifyLocalAssetsProgressEvent).toHaveBeenNthCalledWith(2, 1, 2, `test2-edited.png`);
+            expect(verifyLocalAssetsProgressEvent).toHaveBeenNthCalledWith(3, 2, 2);
             expect(syncEngine.photosLibrary.deleteAsset).not.toHaveBeenCalled();
             expect(syncEngine.icloud.photos.downloadAsset).not.toHaveBeenCalled();
             expect(writeAssetCompleteEvent).not.toHaveBeenCalled();
@@ -461,6 +467,9 @@ describe(`Handle processing queue`, () => {
             await syncEngine.writeAssets([[], [], [asset]]);
 
             expect(asset.verify).toHaveBeenCalledTimes(2);
+            expect(verifyLocalAssetsProgressEvent).toHaveBeenCalledTimes(2);
+            expect(verifyLocalAssetsProgressEvent).toHaveBeenNthCalledWith(1, 0, 1, `test1-edited.png`);
+            expect(verifyLocalAssetsProgressEvent).toHaveBeenNthCalledWith(2, 1, 1);
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledWith(asset);
             expect(writeAssetsEvent).toHaveBeenCalledTimes(1);

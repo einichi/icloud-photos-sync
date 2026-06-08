@@ -247,6 +247,10 @@ export enum iCPSEventSyncEngine {
      */
     WRITE = `sync-write`,
     /**
+     * Emitted when the write process is verifying kept local assets before deciding what must be redownloaded - provides checked count, total count and asset name as arguments
+     */
+    VERIFY_LOCAL_ASSETS_PROGRESS = `sync-verify_local_assets_progress`,
+    /**
      * Emitted when the write process has started writing assets - provides the number of assets to be deleted, added and kept as arguments
      */
     WRITE_ASSETS = `sync-write_assets`,
