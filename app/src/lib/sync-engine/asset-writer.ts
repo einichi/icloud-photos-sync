@@ -31,8 +31,10 @@ export class AssetWriter {
             ...processingQueue[1],
             ...invalidKeptAssets,
         ]);
+        const verifiedKeptCount = processingQueue[2].length - invalidKeptAssets.length;
 
-        Resources.logger(this.logSource).info(`Writing assets by deleting ${toBeDeleted.length} local asset(s), adding ${toBeAdded.length} remote asset(s), and keeping ${processingQueue[2].length - invalidKeptAssets.length} verified local asset(s)`);
+        Resources.emit(iCPSEventSyncEngine.WRITE_ASSETS, toBeDeleted.length, toBeAdded.length, verifiedKeptCount);
+        Resources.logger(this.logSource).info(`Writing assets by deleting ${toBeDeleted.length} local asset(s), adding ${toBeAdded.length} remote asset(s), and keeping ${verifiedKeptCount} verified local asset(s)`);
 
         await Promise.all(toBeDeleted.map(asset => this.photosLibrary.deleteAsset(asset)));
 

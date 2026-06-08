@@ -250,7 +250,6 @@ export class SyncEngine {
         Resources.emit(iCPSEventSyncEngine.WRITE);
         Resources.logger(this).info(`Writing state`);
 
-        Resources.emit(iCPSEventSyncEngine.WRITE_ASSETS, assetQueue[0].length, this.getUniqueAssets(assetQueue[1]).length, assetQueue[2].length);
         await this.writeAssets(assetQueue);
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED);
 

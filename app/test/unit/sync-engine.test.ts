@@ -378,10 +378,9 @@ describe(`Coordination`, () => {
         await syncEngine.writeState(...diffStateReturnValue);
 
         expect(writeEvent).toHaveBeenCalledTimes(1);
-        expect(writeAssetsEvent).toHaveBeenCalledTimes(1);
-        expect(writeAssetsEvent).toHaveBeenCalledWith(1, 1, 1);
         expect(syncEngine.writeAssets).toHaveBeenCalledTimes(1);
         expect(syncEngine.writeAssets).toHaveBeenCalledWith(diffStateReturnValue[0]);
+        expect(writeAssetsEvent).not.toHaveBeenCalled();
         expect(writeAssetsCompletedEvent).toHaveBeenCalledTimes(1);
         expect(writeAlbumsEvent).toHaveBeenCalledTimes(1);
         expect(writeAlbumsEvent).toHaveBeenCalledWith(1, 1, 1);
@@ -396,6 +395,8 @@ describe(`Handle processing queue`, () => {
     describe(`Handle asset queue`, () => {
         let writeAssetCompleteEvent: jest.Mock<UnknownFunction>;
         let writeAssetErrorEvent: jest.Mock<UnknownFunction>;
+        let writeAssetsEvent: jest.Mock<UnknownFunction>;
+        let writeAssetStartedEvent: jest.Mock<UnknownFunction>;
 
         beforeEach(() => {
             syncEngine.photosLibrary.deleteAsset = jest.fn<typeof syncEngine.photosLibrary.deleteAsset>()
@@ -405,6 +406,8 @@ describe(`Handle processing queue`, () => {
 
             writeAssetCompleteEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED);
             writeAssetErrorEvent = mockedEventManager.spyOnEvent(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR);
+            writeAssetsEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.WRITE_ASSETS);
+            writeAssetStartedEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.WRITE_ASSET_STARTED);
         });
 
         test(`Empty processing queue`, async () => {
@@ -460,6 +463,10 @@ describe(`Handle processing queue`, () => {
             expect(asset.verify).toHaveBeenCalledTimes(2);
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledWith(asset);
+            expect(writeAssetsEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetsEvent).toHaveBeenCalledWith(0, 1, 0);
+            expect(writeAssetStartedEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetStartedEvent).toHaveBeenCalledWith(`test1-edited.png`);
             expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(1);
             expect(writeAssetCompleteEvent).toHaveBeenCalledWith(`test1-edited.png`);
             expect(writeAssetErrorEvent).not.toHaveBeenCalled();
