@@ -236,13 +236,23 @@ export class SyncEngine {
      * @emits iCPSEventSyncEngine.DIFF_COMPLETED - When the diff is done
      */
     async diffState(remoteAssets: Asset[], remoteAlbums: Album[], localAssets: PLibraryEntities<Asset>, localAlbums: PLibraryEntities<Album>): Promise<[PLibraryProcessingQueues<Asset>, PLibraryProcessingQueues<Album>]> {
+        const startedAt = Date.now();
+        const localAssetCount = Object.keys(localAssets).length;
+        const localAlbumCount = Object.keys(localAlbums).length;
         Resources.emit(iCPSEventSyncEngine.DIFF);
-        Resources.logger(this).info(`Diffing state`);
+        Resources.logger(this).info(
+            `Diffing remote state (${remoteAssets.length} asset(s), ${remoteAlbums.length} album(s)) `
+            + `against local state (${localAssetCount} asset(s), ${localAlbumCount} album(s))`,
+        );
         const [assetQueue, albumQueue] = await Promise.all([
             SyncEngineHelper.getProcessingQueues(remoteAssets, localAssets),
             SyncEngineHelper.getProcessingQueues(remoteAlbums, localAlbums),
         ]);
         const resolvedAlbumQueue = SyncEngineHelper.resolveHierarchicalDependencies(albumQueue, localAlbums);
+        Resources.logger(this).info(
+            `Completed state diff in ${Date.now() - startedAt}ms; `
+            + `assets: ${this.formatQueueSummary(assetQueue)}; albums: ${this.formatQueueSummary(resolvedAlbumQueue)}`,
+        );
         Resources.emit(iCPSEventSyncEngine.DIFF_COMPLETED);
         return [assetQueue, resolvedAlbumQueue];
     }
@@ -260,8 +270,14 @@ export class SyncEngine {
      * @emits iCPSEventSyncEngine.WRITE_COMPLETED - When the write is done
      */
     async writeState(assetQueue: PLibraryProcessingQueues<Asset>, albumQueue: PLibraryProcessingQueues<Album>) {
+        const startedAt = Date.now();
+        const queuedChangeCount = assetQueue[0].length + assetQueue[1].length + albumQueue[0].length + albumQueue[1].length;
+        const unchangedCount = assetQueue[2].length + albumQueue[2].length;
         Resources.emit(iCPSEventSyncEngine.WRITE);
-        Resources.logger(this).info(`Writing state`);
+        Resources.logger(this).info(
+            `Writing state changes (${queuedChangeCount} queued add/delete action(s), ${unchangedCount} unchanged item(s)); `
+            + `assets: ${this.formatQueueSummary(assetQueue)}; albums: ${this.formatQueueSummary(albumQueue)}`,
+        );
 
         await this.writeAssets(assetQueue);
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED);
@@ -271,6 +287,16 @@ export class SyncEngine {
         Resources.emit(iCPSEventSyncEngine.WRITE_ALBUMS_COMPLETED);
 
         Resources.emit(iCPSEventSyncEngine.WRITE_COMPLETED);
+        Resources.logger(this).info(`Completed writing state changes in ${Date.now() - startedAt}ms`);
+    }
+
+    /**
+     * Formats sync processing queue counts for concise progress logging.
+     * @param queue - The queue whose delete/add/keep counts should be summarized
+     * @returns A human-readable queue summary
+     */
+    private formatQueueSummary<T>(queue: PLibraryProcessingQueues<T>): string {
+        return `delete ${queue[0].length}, add ${queue[1].length}, keep ${queue[2].length}`;
     }
 
     /**

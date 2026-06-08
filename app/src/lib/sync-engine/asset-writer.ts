@@ -8,7 +8,7 @@ import {iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-
 import {Resources} from '../resources/main.js';
 import type {SyncOptions} from './sync-engine.js';
 
-const ASSET_PROGRESS_LOG_INTERVAL = 25;
+const ASSET_PROGRESS_LOG_PERCENT_INTERVAL = 10;
 
 /**
  * Writes asset changes to disk by deleting stale local assets and downloading missing remote assets.
@@ -43,9 +43,24 @@ export class AssetWriter {
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSETS, toBeDeleted.length, toBeAdded.length, verifiedKeptCount);
         Resources.logger(this.logSource).info(`Writing assets by deleting ${toBeDeleted.length} local asset(s), adding ${toBeAdded.length} remote asset(s), and keeping ${verifiedKeptCount} verified local asset(s)`);
 
-        await Promise.all(toBeDeleted.map(asset => this.photosLibrary.deleteAsset(asset)));
+        const totalAssetChanges = toBeDeleted.length + toBeAdded.length;
+        let completedAssetChanges = 0;
+        let nextProgressLogPercent = ASSET_PROGRESS_LOG_PERCENT_INTERVAL;
 
-        let completedAssets = 0;
+        const logAssetWriteProgress = () => {
+            completedAssetChanges++;
+            const progressLogPercent = this.getProgressLogPercent(completedAssetChanges, totalAssetChanges, nextProgressLogPercent);
+            if (progressLogPercent !== undefined) {
+                Resources.logger(this.logSource).info(`Asset write progress: ${progressLogPercent}% (${completedAssetChanges}/${totalAssetChanges})`);
+                nextProgressLogPercent = progressLogPercent + ASSET_PROGRESS_LOG_PERCENT_INTERVAL;
+            }
+        };
+
+        await Promise.all(toBeDeleted.map(async asset => {
+            await this.photosLibrary.deleteAsset(asset);
+            logAssetWriteProgress();
+        }));
+
         const nextAsset = toBeAdded.values();
         const configuredWorkerCount = Resources.manager().downloadThreads === Infinity
             ? toBeAdded.length
@@ -54,12 +69,31 @@ export class AssetWriter {
         await Promise.all(Array.from({length: workerCount}, async () => {
             for (let next = nextAsset.next(); !next.done; next = nextAsset.next()) {
                 await this.addAsset(next.value);
-                completedAssets++;
-                if (completedAssets % ASSET_PROGRESS_LOG_INTERVAL === 0 || completedAssets === toBeAdded.length) {
-                    Resources.logger(this.logSource).info(`Asset sync progress: ${completedAssets}/${toBeAdded.length}`);
-                }
+                logAssetWriteProgress();
             }
         }));
+    }
+
+    /**
+     * Gets the latest crossed 10% progress threshold for asset write logging.
+     * @param completedCount - The number of completed asset writes
+     * @param totalCount - The total number of asset writes
+     * @param nextProgressLogPercent - The next percentage threshold that should be logged
+     * @returns The crossed percentage threshold, or undefined if no threshold was reached
+     */
+    private getProgressLogPercent(completedCount: number, totalCount: number, nextProgressLogPercent: number): number | undefined {
+        if (totalCount === 0) {
+            return undefined;
+        }
+
+        const completedPercent = Math.floor((completedCount / totalCount) * 100);
+        const completedProgressLogPercent = Math.floor(completedPercent / ASSET_PROGRESS_LOG_PERCENT_INTERVAL)
+            * ASSET_PROGRESS_LOG_PERCENT_INTERVAL;
+        if (completedProgressLogPercent < nextProgressLogPercent) {
+            return undefined;
+        }
+
+        return Math.min(100, completedProgressLogPercent);
     }
 
     /**
