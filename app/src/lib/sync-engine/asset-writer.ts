@@ -26,9 +26,13 @@ export class AssetWriter {
      */
     async writeAssets(processingQueue: PLibraryProcessingQueues<Asset>) {
         const toBeDeleted = processingQueue[0];
-        const toBeAdded = this.getUniqueAssets(processingQueue[1]);
+        const invalidKeptAssets = await this.getInvalidKeptAssets(processingQueue[2]);
+        const toBeAdded = this.getUniqueAssets([
+            ...processingQueue[1],
+            ...invalidKeptAssets,
+        ]);
 
-        Resources.logger(this.logSource).info(`Writing assets by deleting ${toBeDeleted.length} local asset(s) and adding ${toBeAdded.length} remote asset(s)`);
+        Resources.logger(this.logSource).info(`Writing assets by deleting ${toBeDeleted.length} local asset(s), adding ${toBeAdded.length} remote asset(s), and keeping ${processingQueue[2].length - invalidKeptAssets.length} verified local asset(s)`);
 
         await Promise.all(toBeDeleted.map(asset => this.photosLibrary.deleteAsset(asset)));
 
@@ -90,6 +94,25 @@ export class AssetWriter {
         }
 
         return [...uniqueAssets.values()];
+    }
+
+    /**
+     * Verifies kept assets against iCloud metadata and checksum before leaving them untouched.
+     * @param assets - Assets that matched the remote metadata during diffing
+     * @returns Assets that failed verification and need to be redownloaded
+     */
+    private async getInvalidKeptAssets(assets: Asset[]): Promise<Asset[]> {
+        const invalidAssets: Asset[] = [];
+        for (const asset of assets) {
+            try {
+                await asset.verify();
+            } catch (err) {
+                Resources.logger(this.logSource).warn(`Kept asset ${this.getAssetProgressDisplayName(asset)} failed verification and will be redownloaded: ${iCPSError.toiCPSError(err).getDescription()}`);
+                invalidAssets.push(asset);
+            }
+        }
+
+        return invalidAssets;
     }
 
     /**

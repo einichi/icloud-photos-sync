@@ -4,6 +4,7 @@ import mockfs from 'mock-fs';
 import path from 'path';
 import {Zones} from '../../src/lib/icloud/icloud-photos/query-builder';
 import {ARCHIVE_DIR, PRIMARY_ASSET_DIR, SHARED_ASSET_DIR, STASH_DIR} from '../../src/lib/photos-library/constants';
+import {AssetChecksum} from '../../src/lib/photos-library/asset-checksum';
 import {Album, AlbumType} from '../../src/lib/photos-library/model/album';
 import {Asset} from '../../src/lib/photos-library/model/asset';
 import {FileType} from '../../src/lib/photos-library/model/file-type';
@@ -16,6 +17,7 @@ const primaryAssetDir = path.join(Config.defaultConfig.dataDir, PRIMARY_ASSET_DI
 const sharedAssetDir = path.join(Config.defaultConfig.dataDir, SHARED_ASSET_DIR);
 const archiveDir = path.join(Config.defaultConfig.dataDir, ARCHIVE_DIR);
 const stashDir = path.join(Config.defaultConfig.dataDir, ARCHIVE_DIR, STASH_DIR);
+const checksumToFileName = (checksum: string) => Buffer.from(checksum, `base64`).toString(`base64url`);
 
 let mockedEventManager: MockedEventManager;
 let mockedResourceManager: MockedResourceManager;
@@ -28,6 +30,18 @@ beforeEach(() => {
 
 afterEach(() => {
     mockfs.restore();
+});
+
+describe(`Asset checksum`, () => {
+    test.each([
+        [`empty`, Buffer.alloc(0), `AW2cWT2PxzWixMKuuNMTHJ8CJ3sH`],
+        [`00`, Buffer.from([0x00]), `AXmvBPPSJFDNYkN40KtugywDrZZ8`],
+        [`ascii_a`, Buffer.from(`a`), `AW+DzqpT1naxyJUxKmucLJWVb+cN`],
+        [`ascii_abc`, Buffer.from(`abc`), `AYnnoj1r4lMYTs3JP/g7mjGaDCgO`],
+        [`quick_brown`, Buffer.from(`The quick brown fox jumps over the lazy dog`), `ATE6W0VAGbjhs9B5SmRCwt9Y3yxl`],
+    ])(`Matches MSMMCSHashForFileAtPath vector %s`, (_desc, data, expectedChecksum) => {
+        expect(AssetChecksum.forBuffer(data)).toEqual(expectedChecksum);
+    });
 });
 
 test(`Libraries version mismatch should throw`, () => {
@@ -578,10 +592,10 @@ describe(`Write state`, () => {
         zoneDir: sharedAssetDir,
     }])(`Write assets - $zone`, ({zone, zoneDir}) => {
         test(`Successfully verify asset`, async () => {
-            const assetFileName = `Aa7_yox97ecSUNmVw0xP4YzIDDKf`;
-            const assetChecksum = Buffer.from(assetFileName, `base64url`).toString(`base64`);
             const assetExt = `jpeg`;
             const assetData = Buffer.from([1, 1, 1, 1]);
+            const assetChecksum = AssetChecksum.forBuffer(assetData);
+            const assetFileName = checksumToFileName(assetChecksum);
             const assetMTime = 1640995200000; // 01.01.2022
             const fileType = FileType.fromExtension(assetExt);
             mockfs({
@@ -606,10 +620,10 @@ describe(`Write state`, () => {
             [1000],
             [-1000],
         ])(`Successfully verify asset within range of %i ms`, async range => {
-            const assetFileName = `Aa7_yox97ecSUNmVw0xP4YzIDDKf`;
-            const assetChecksum = Buffer.from(assetFileName, `base64url`).toString(`base64`);
             const assetExt = `jpeg`;
             const assetData = Buffer.from([1, 1, 1, 1]);
+            const assetChecksum = AssetChecksum.forBuffer(assetData);
+            const assetFileName = checksumToFileName(assetChecksum);
             const assetMTime = 1640995200000; // 01.01.2022
             const fileType = FileType.fromExtension(assetExt);
             mockfs({
@@ -627,10 +641,10 @@ describe(`Write state`, () => {
         });
 
         test(`Reject unverifiable asset - Wrong Size`, async () => {
-            const assetFileName = `Aa7_yox97ecSUNmVw0xP4YzIDDKf`;
-            const assetChecksum = Buffer.from(assetFileName, `base64url`).toString(`base64`);
             const assetExt = `jpeg`;
             const assetData = Buffer.from([1, 1, 1, 1]);
+            const assetChecksum = AssetChecksum.forBuffer(assetData);
+            const assetFileName = checksumToFileName(assetChecksum);
             const assetMTime = 1640995200000; // 01.01.2022
             const fileType = FileType.fromExtension(assetExt);
             mockfs({
@@ -669,10 +683,10 @@ describe(`Write state`, () => {
             [1000000000],
             [-1000000000],
         ])(`Reject unverifiable asset - Wrong MTime due to range of %i ms`, async range => {
-            const assetFileName = `Aa7_yox97ecSUNmVw0xP4YzIDDKf`;
-            const assetChecksum = Buffer.from(assetFileName, `base64url`).toString(`base64`);
             const assetExt = `jpeg`;
             const assetData = Buffer.from([1, 1, 1, 1]);
+            const assetChecksum = AssetChecksum.forBuffer(assetData);
+            const assetFileName = checksumToFileName(assetChecksum);
             const assetMTime = 1640995200000; // 01.01.2022
             const fileType = FileType.fromExtension(assetExt);
             mockfs({
@@ -689,27 +703,27 @@ describe(`Write state`, () => {
             await expect(library.verifyAsset(asset)).rejects.toThrow(/^File's modification time does not match iCloud record$/);
         });
 
-        // Checksum verification is currently not understood/implemented. Therefore skipping
-        // test.skip(`Reject unverifiable asset - Wrong Checksum`, async () => {
-        //     const assetFileName = `Aa7_yox97ecSUNmVw0xP4YzIDDKf`;
-        //     const _assetChecksum = Buffer.from(assetFileName, `base64url`).toString(`base64`);
-        //     const assetExt = `jpeg`;
-        //     const assetData = Buffer.from([1, 1, 1, 1]);
-        //     const assetMTime = 1640995200000; // 01.01.2022
-        //     const fileType = FileType.fromExtension(assetExt);
-        //     mockfs({
-        //         [assetDir]: {
-        //             [`${assetFileName}.${assetExt}`]: mockfs.file({
-        //                 "content": assetData,
-        //                 "mtime": new Date(assetMTime),
-        //             }),
-        //         },
-        //     });
+        test(`Reject unverifiable asset - Wrong Checksum`, async () => {
+            const assetExt = `jpeg`;
+            const expectedAssetData = Buffer.from([1, 1, 1, 1]);
+            const corruptAssetData = Buffer.from([2, 2, 2, 2]);
+            const assetChecksum = AssetChecksum.forBuffer(expectedAssetData);
+            const assetFileName = checksumToFileName(assetChecksum);
+            const assetMTime = 1640995200000; // 01.01.2022
+            const fileType = FileType.fromExtension(assetExt);
+            mockfs({
+                [zoneDir]: {
+                    [`${assetFileName}.${assetExt}`]: mockfs.file({
+                        content: corruptAssetData,
+                        mtime: new Date(assetMTime),
+                    }),
+                },
+            });
 
-        //     const library = new PhotosLibrary();
-        //     const asset = new Asset(`asdf`, assetData.length, fileType, assetMTime);
-        //     await expect(library.verifyAsset(asset)).rejects.toThrow(/^'bla$/)
-        // });
+            const library = new PhotosLibrary();
+            const asset = new Asset(assetChecksum, corruptAssetData.length, fileType, assetMTime, zone);
+            await expect(library.verifyAsset(asset)).rejects.toThrow(/^File's checksum does not match iCloud record$/);
+        });
 
         test(`Delete asset`, async () => {
             const assetFileName = `Aa7_yox97ecSUNmVw0xP4YzIDDKf`;
