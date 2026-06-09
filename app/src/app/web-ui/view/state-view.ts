@@ -33,6 +33,7 @@ export class StateView extends View {
             <p      class="hidden-when-not-ready" id="next-sync-text" style="display: none">Next sync scheduled at<br/><span id="next-sync-time">...</span></p>
             <button class="hidden-when-not-ready" id="sync-button" onclick="triggerSync()">Sync Now</button>
             <button class="hidden-when-not-ready" id="reauth-button" onclick="triggerReauth()">Renew Authentication</button>
+            <div class="hidden-when-not-ready last-sync-stats" id="last-sync-stats" style="display: none;"></div>
         `;
     }
 

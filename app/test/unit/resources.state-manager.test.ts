@@ -557,6 +557,53 @@ describe(`State changes`, () => {
         }))
     })
 
+    test(`Should serialize last successful sync stats`, () => {
+        mockedEventManager.emit(iCPSEventSyncEngine.START);
+        mockedEventManager.emit(iCPSEventSyncEngine.FETCH_N_LOAD_COMPLETED, 10, 2, 8, 1);
+        mockedEventManager.emit(iCPSEventSyncEngine.VERIFY_LOCAL_ASSETS_PROGRESS, 8, 8);
+        mockedEventManager.emit(iCPSEventSyncEngine.WRITE_ASSET_DOWNLOADED, `IMG_0001.HEIC`, `new`);
+        mockedEventManager.emit(iCPSEventSyncEngine.WRITE_ASSET_DOWNLOADED, `IMG_0002.HEIC`, `redownloaded`);
+        mockedEventManager.emit(iCPSEventRuntimeWarning.COUNT_MISMATCH, `album`, 10, 9, 9);
+        mockedEventManager.emit(iCPSEventSyncEngine.DONE);
+
+        expect(mockedState.serialize().lastSyncStats).toEqual(expect.objectContaining({
+            status: `completed`,
+            remoteAssetCount: 10,
+            remoteAlbumCount: 2,
+            localAssetCount: 8,
+            localAlbumCount: 1,
+            newDownloadCount: 1,
+            redownloadCount: 1,
+            hashCheckingOccurred: true,
+            hashCheckedCount: 8,
+            hashCheckTotal: 8,
+            warningErrorCount: 1,
+            finishedAt: expect.any(Number),
+            durationMs: expect.any(Number),
+        }));
+    });
+
+    test(`Should serialize last failed sync stats`, () => {
+        mockedEventManager.emit(iCPSEventSyncEngine.START);
+        mockedEventManager.emit(iCPSEventSyncEngine.FETCH_N_LOAD_COMPLETED, 10, 2, 8, 1);
+        mockedEventManager.emit(iCPSEventRuntimeError.SCHEDULED_ERROR, new Error(`Test`));
+
+        expect(mockedState.serialize().lastSyncStats).toEqual(expect.objectContaining({
+            status: `failed`,
+            remoteAssetCount: 10,
+            remoteAlbumCount: 2,
+            localAssetCount: 8,
+            localAlbumCount: 1,
+            newDownloadCount: 0,
+            redownloadCount: 0,
+            hashCheckingOccurred: false,
+            hashCheckedCount: 0,
+            warningErrorCount: 1,
+            finishedAt: expect.any(Number),
+            durationMs: expect.any(Number),
+        }));
+    });
+
     test(`Should show fetch and load progress detail`, () => {
         mockedEventManager.emit(iCPSEventApp.SCHEDULED_START)
         mockedEventManager.emit(iCPSEventSyncEngine.FETCH_N_LOAD)

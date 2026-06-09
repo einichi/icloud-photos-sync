@@ -99,6 +99,31 @@ export const stateViewCSS = `
     animation: indeterminate 1.5s ease-in-out infinite;
     transition: none;
 }
+.last-sync-stats {
+    width: 80%;
+    max-width: 28rem;
+    margin: 1rem auto 0;
+    font-size: 0.9rem;
+}
+.last-sync-stats h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+}
+.last-sync-stats dl {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.35rem 1rem;
+    margin: 0;
+}
+.last-sync-stats dt {
+    color: #687386;
+}
+.last-sync-stats dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
 @keyframes indeterminate {
     0% {
         transform: translateX(-100%);
@@ -126,5 +151,9 @@ export const stateViewCSSDark = `
     
 #enter-mfa-section {
     background-color: #3a3a3a;
+}
+
+.last-sync-stats dt {
+    color: #b0b8c4;
 }
 `

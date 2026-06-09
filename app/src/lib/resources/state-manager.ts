@@ -70,7 +70,25 @@ export type SerializedState = {
     trustedPhoneNumbers?: {
         id: number,
         maskedNumber: string
-    }[]
+    }[],
+    lastSyncStats?: SyncStats,
+}
+
+export type SyncStats = {
+    status: `completed` | `failed`,
+    startedAt: number,
+    finishedAt?: number,
+    durationMs?: number,
+    remoteAssetCount?: number,
+    remoteAlbumCount?: number,
+    localAssetCount?: number,
+    localAlbumCount?: number,
+    newDownloadCount: number,
+    redownloadCount: number,
+    hashCheckingOccurred: boolean,
+    hashCheckedCount: number,
+    hashCheckTotal?: number,
+    warningErrorCount: number,
 }
 
 export class StateManager {
@@ -105,6 +123,9 @@ export class StateManager {
     } = {}
 
     private readonly assetProgressTracker = new AssetProgressTracker();
+
+    private currentSyncStats?: SyncStats;
+    private lastSyncStats?: SyncStats;
 
     trustedPhoneNumbers?: TrustedPhoneNumber[] 
 
@@ -184,6 +205,7 @@ export class StateManager {
         // Sync process
         Resources.events(this)
             .on(iCPSEventSyncEngine.START, () => {
+                this.startSyncStats();
                 this.updateState(StateType.RUNNING, {progressMsg: `Starting sync...`, progress: 15});
             })
             .on(iCPSEventSyncEngine.FETCH_N_LOAD, () => {
@@ -200,6 +222,12 @@ export class StateManager {
                 this.updateFetchAndLoadDetail(detail);
             })
             .on(iCPSEventSyncEngine.FETCH_N_LOAD_COMPLETED, (remoteAssetCount: number, remoteAlbumCount: number, localAssetCount: number, localAlbumCount: number) => {
+                this.updateSyncStats({
+                    remoteAssetCount,
+                    remoteAlbumCount,
+                    localAssetCount,
+                    localAlbumCount,
+                });
                 this.updateState(StateType.RUNNING, {progressMsg: `Loaded local (${localAssetCount} assets in ${localAlbumCount} albums) & remote state (${remoteAssetCount} assets in ${remoteAlbumCount} albums)`, progress: SYNC_PROGRESS.FETCH_LOAD_END});
             })
             .on(iCPSEventSyncEngine.DIFF, () => {
@@ -212,11 +240,26 @@ export class StateManager {
                 this.updateState(StateType.RUNNING, {progressMsg: `Preparing local changes...`, progress: 25});
             })
             .on(iCPSEventSyncEngine.VERIFY_LOCAL_ASSETS_PROGRESS, (checkedCount: number, totalCount: number, assetName?: string) => {
+                if (totalCount > 0) {
+                    this.updateSyncStats({
+                        hashCheckingOccurred: true,
+                        hashCheckedCount: Math.max(this.currentSyncStats?.hashCheckedCount ?? 0, checkedCount),
+                        hashCheckTotal: totalCount,
+                    });
+                }
                 this.updateState(StateType.RUNNING, {
                     progressMsg: `Verifying local asset checksums: ${checkedCount}/${totalCount}`,
                     progressDetail: assetName,
                     progress: this.getProgressInRange(checkedCount, totalCount, SYNC_PROGRESS.VERIFY_LOCAL_ASSETS_START, SYNC_PROGRESS.VERIFY_LOCAL_ASSETS_END),
                 });
+            })
+            .on(iCPSEventSyncEngine.WRITE_ASSET_DOWNLOADED, (_assetName: string, reason: `new` | `redownloaded`) => {
+                if (reason === `redownloaded`) {
+                    this.updateSyncStats({redownloadCount: (this.currentSyncStats?.redownloadCount ?? 0) + 1});
+                    return;
+                }
+
+                this.updateSyncStats({newDownloadCount: (this.currentSyncStats?.newDownloadCount ?? 0) + 1});
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS, (_toBeDeletedCount: number, toBeAddedCount: number, _toBeKept: number) => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Syncing assets: 0/${toBeAddedCount}`, progress: SYNC_PROGRESS.WRITE_ASSETS_START});
@@ -244,6 +287,9 @@ export class StateManager {
             .on(iCPSEventSyncEngine.WRITE_COMPLETED, () => {
                 this.updateState(StateType.RUNNING, {progressMsg: `Successfully wrote diff to disk!`, progress: 99});
             })
+            .on(iCPSEventSyncEngine.DONE, () => {
+                this.finishSyncStats(`completed`);
+            })
             .on(iCPSEventSyncEngine.RETRY, (retryCount: number, err: iCPSError, backoffMs?: number) => {
                 const retryMsg = backoffMs
                     ? `Settling outstanding requests, then waiting ${Math.ceil(backoffMs / 1000)}s before refreshing iCloud connection & retrying`
@@ -267,6 +313,8 @@ export class StateManager {
         // ERROR
         Resources.events(this)
             .on(iCPSEventRuntimeError.SCHEDULED_ERROR, (err: iCPSError) => {
+                this.updateSyncStats({warningErrorCount: (this.currentSyncStats?.warningErrorCount ?? 0) + 1});
+                this.finishSyncStats(`failed`);
                 this.updateState(StateType.READY, {error: err});
             })
             .on(iCPSEventMFA.MFA_NOT_PROVIDED, () => {
@@ -321,7 +369,51 @@ export class StateManager {
                 this.addLog(LogLevel.WARN, `RuntimeWarning`, `Detected error during sync: ${iCPSError.toiCPSError(err).getDescription()}`);
             })
             .on(iCPSEventLog.ERROR, (source: unknown, msg: string) => this.addLog(LogLevel.ERROR, source, msg))
-            .on(iCPSEventRuntimeError.HANDLED_ERROR, (err: iCPSError) => this.addLog(LogLevel.ERROR, `RuntimeError`, iCPSError.toiCPSError(err).getDescription()));
+            .on(iCPSEventRuntimeError.HANDLED_ERROR, (err: iCPSError) => {
+                if (this.currentSyncStats) {
+                    this.updateSyncStats({warningErrorCount: this.currentSyncStats.warningErrorCount + 1});
+                    this.finishSyncStats(`failed`);
+                }
+                this.addLog(LogLevel.ERROR, `RuntimeError`, iCPSError.toiCPSError(err).getDescription());
+            });
+    }
+
+    private startSyncStats(): void {
+        this.currentSyncStats = {
+            status: `failed`,
+            startedAt: Date.now(),
+            newDownloadCount: 0,
+            redownloadCount: 0,
+            hashCheckingOccurred: false,
+            hashCheckedCount: 0,
+            warningErrorCount: 0,
+        };
+    }
+
+    private updateSyncStats(update: Partial<SyncStats>): void {
+        if (!this.currentSyncStats) {
+            return;
+        }
+
+        this.currentSyncStats = {
+            ...this.currentSyncStats,
+            ...update,
+        };
+    }
+
+    private finishSyncStats(status: SyncStats[`status`]): void {
+        if (!this.currentSyncStats) {
+            return;
+        }
+
+        const finishedAt = Date.now();
+        this.lastSyncStats = {
+            ...this.currentSyncStats,
+            status,
+            finishedAt,
+            durationMs: finishedAt - this.currentSyncStats.startedAt,
+        };
+        this.currentSyncStats = undefined;
     }
 
     /**
@@ -475,6 +567,10 @@ export class StateManager {
             time: Date.now()
         }
 
+        if (this.currentSyncStats && [LogLevel.WARN, LogLevel.ERROR].includes(level)) {
+            this.updateSyncStats({warningErrorCount: this.currentSyncStats.warningErrorCount + 1});
+        }
+
         this.log.push(msg)
         Resources.event().emit(iCPSState.LOG_ADDED, msg)
     }
@@ -530,7 +626,8 @@ export class StateManager {
             progressDetail: this.inProgressContext?.detail,
             trustTokenCreatedAt: Resources.manager().trustTokenCreatedAt,
             trustTokenExpiresAt: Resources.manager().trustTokenExpiresAt,
-            trustedPhoneNumbers
+            trustedPhoneNumbers,
+            lastSyncStats: this.lastSyncStats,
         };
     }
 

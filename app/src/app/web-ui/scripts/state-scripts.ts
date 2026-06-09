@@ -135,6 +135,61 @@ function formatTokenExpiry(state) {
     return "<br/><br/>MFA token expires in " + remaining + "<br/>" + absoluteExpiry;
 }
 
+function formatCount(value) {
+    return value === undefined || value === null ? "0" : Number(value).toLocaleString();
+}
+
+function formatDuration(durationMs) {
+    if (durationMs === undefined || durationMs === null) {
+        return "0s";
+    }
+
+    const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    if (minutes === 0) {
+        return seconds + "s";
+    }
+
+    return minutes + "m " + seconds + "s";
+}
+
+function setLastSyncStats(stats) {
+    const statsContainer = document.getElementById('last-sync-stats');
+    if (!statsContainer) {
+        return;
+    }
+
+    if (!stats) {
+        statsContainer.style.display = "none";
+        statsContainer.innerHTML = "";
+        return;
+    }
+
+    const heading = stats.status === "failed" ? "Last failed sync" : "Last completed sync";
+    const hashChecked = stats.hashCheckingOccurred
+        ? formatCount(stats.hashCheckedCount) + "/" + formatCount(stats.hashCheckTotal)
+        : "0";
+    const rows = [
+        ["Finished", stats.finishedAt ? formatDate(stats.finishedAt) : "0"],
+        ["Duration", formatDuration(stats.durationMs)],
+        ["Remote assets", formatCount(stats.remoteAssetCount)],
+        ["Local assets", formatCount(stats.localAssetCount)],
+        ["Remote albums", formatCount(stats.remoteAlbumCount)],
+        ["Local albums", formatCount(stats.localAlbumCount)],
+        ["New downloads", formatCount(stats.newDownloadCount)],
+        ["Redownloads", formatCount(stats.redownloadCount)],
+        ["Hash checked", hashChecked],
+        ["Warnings/errors", formatCount(stats.warningErrorCount)],
+    ];
+
+    statsContainer.innerHTML = "<h2>" + heading + "</h2><dl>" + rows.map(([label, value]) => {
+        return "<dt>" + escapeHtml(label) + "</dt><dd>" + escapeHtml(value) + "</dd>";
+    }).join("") + "</dl>";
+    statsContainer.style.display = "block";
+}
+
 function setProgress(progress) {
     if(progress !== undefined && progress !== null && progress >= 0) {
         const boundedProgress = Math.max(0, Math.min(progress, 100));
@@ -163,6 +218,8 @@ function resetState() {
         el.style.display = "none";
     });
     document.getElementById('credential-container').style.display = "none";
+    document.getElementById('last-sync-stats').style.display = "none";
+    document.getElementById('last-sync-stats').innerHTML = "";
 }
 
 /**
@@ -193,6 +250,7 @@ function updateState(state) {
             document.querySelectorAll(".hidden-when-not-ready").forEach((el) => {
                 el.style.display = "block";
             });
+            setLastSyncStats(state.lastSyncStats);
 
             // If there was an error reported, show it
             if(state.prevError) {
