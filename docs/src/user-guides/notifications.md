@@ -13,8 +13,11 @@ SMTP email notifications are sent for these events:
 
 - The container starts without Apple ID credentials in memory, so the user needs to authenticate through the Web UI.
 - The stored iCloud MFA token is nearing expiry. Warnings are sent at most once per day while the token is inside the configured warning window.
+- Each sync finishes or fails, when `SMTP_SYNC_REPORT=true`.
 
 The MFA token expiry is estimated from the `trustTokenCreatedAt` timestamp in the `.icloud-photos-sync` resource file plus `TRUST_TOKEN_LIFETIME_DAYS`. The timestamp is created when a new token is stored; existing resource files that already have a token but no timestamp will get one automatically.
+
+Sync result reports contain a summary followed by details: new downloads, redownloads caused by checksum mismatches, whether kept-asset hash checking occurred, and any warnings or errors emitted during the sync.
 
 ### Environment Variables
 
@@ -29,6 +32,7 @@ The MFA token expiry is estimated from the `trustTokenCreatedAt` timestamp in th
 | `SMTP_FROM_NAME` | unset | no | Optional sender display name. This is easier in Docker Compose than embedding quotes in `SMTP_FROM`; for example `SMTP_FROM=notifications@burg.in` and `SMTP_FROM_NAME=Photo Sync` sends as `"Photo Sync" <notifications@burg.in>`. |
 | `SMTP_TO` | unset | yes | Recipient address. Multiple recipients can be comma-separated. |
 | `SMTP_TOKEN_EXPIRY_WARNING_DAYS` | `3` | no | Start sending daily MFA-token expiry warning emails this many days before estimated expiry. |
+| `SMTP_SYNC_REPORT` | `false` | no | Send an email report after each completed or failed sync. |
 | `TRUST_TOKEN_LIFETIME_DAYS` | `30` | no | Number of days a stored MFA token is considered valid for Web UI display and notification scheduling. |
 | `NOTIFICATION_WEB_HOST_IP` | `localhost` | no | Docker host IP to use only when rendering Web UI URLs in notification emails. This does not change the Web UI bind address. |
 | `NOTIFICATION_WEB_EXPOSED_PORT` | `PORT` | no | Docker host exposed Web UI port to use only when rendering Web UI URLs in notification emails. This is useful when Docker maps the container's internal `PORT` to a different host port. |
@@ -50,6 +54,7 @@ services:
       SMTP_FROM_NAME: "iCloud Photos Sync"
       SMTP_TO: "you@example.com"
       SMTP_TOKEN_EXPIRY_WARNING_DAYS: 3
+      SMTP_SYNC_REPORT: "true"
       TRUST_TOKEN_LIFETIME_DAYS: 30
       NOTIFICATION_WEB_HOST_IP: "192.168.1.50"
       NOTIFICATION_WEB_EXPOSED_PORT: 8081

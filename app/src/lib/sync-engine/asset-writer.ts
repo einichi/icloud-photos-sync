@@ -4,7 +4,7 @@ import {iCloud} from '../icloud/icloud.js';
 import {PhotosLibrary} from '../photos-library/photos-library.js';
 import {Asset} from '../photos-library/model/asset.js';
 import {PLibraryProcessingQueues} from '../photos-library/model/photos-entity.js';
-import {iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-types.js';
+import {AssetDownloadReason, iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-types.js';
 import {Resources} from '../resources/main.js';
 import type {SyncOptions} from './sync-engine.js';
 
@@ -31,6 +31,7 @@ export class AssetWriter {
         const invalidKeptAssets = this.options.verifyKeptAssetChecksums
             ? await this.getInvalidKeptAssets(processingQueue[2])
             : [];
+        const invalidKeptAssetPaths = new Set(invalidKeptAssets.map(asset => asset.getAssetFilePath()));
         const toBeAdded = this.getUniqueAssets([
             ...processingQueue[1],
             ...invalidKeptAssets,
@@ -68,7 +69,10 @@ export class AssetWriter {
         const workerCount = Math.min(configuredWorkerCount, toBeAdded.length);
         await Promise.all(Array.from({length: workerCount}, async () => {
             for (let next = nextAsset.next(); !next.done; next = nextAsset.next()) {
-                await this.addAsset(next.value);
+                const downloadReason: AssetDownloadReason = invalidKeptAssetPaths.has(next.value.getAssetFilePath())
+                    ? `redownloaded`
+                    : `new`;
+                await this.addAsset(next.value, downloadReason);
                 logAssetWriteProgress();
             }
         }));
@@ -99,11 +103,12 @@ export class AssetWriter {
     /**
      * Downloads and stores a given asset, unless a valid file is already present on disk.
      * @param asset - The asset that needs to be downloaded
+     * @param downloadReason - Why the asset was queued for download
      * @returns A promise that resolves once the file has been successfully written to disk
      */
-    async addAsset(asset: Asset) {
+    async addAsset(asset: Asset, downloadReason: AssetDownloadReason = `new`) {
+        const assetProgressDisplayName = this.getAssetProgressDisplayName(asset);
         try {
-            const assetProgressDisplayName = this.getAssetProgressDisplayName(asset);
             if (await this.hasValidLocalAsset(asset)) {
                 Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, assetProgressDisplayName);
                 return;
@@ -118,7 +123,8 @@ export class AssetWriter {
             return;
         }
 
-        Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, this.getAssetProgressDisplayName(asset));
+        Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_DOWNLOADED, assetProgressDisplayName, downloadReason);
+        Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, assetProgressDisplayName);
     }
 
     /**

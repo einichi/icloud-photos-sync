@@ -1,8 +1,10 @@
 import net from 'net';
 import tls from 'tls';
-import {iCPSEventCloud} from "../../lib/resources/events-types.js";
+import {AssetDownloadReason, iCPSEventCloud, iCPSEventRuntimeError, iCPSEventSyncEngine, iCPSState} from "../../lib/resources/events-types.js";
 import {Resources} from "../../lib/resources/main.js";
 import {SmtpConfig} from "../../lib/resources/resource-manager.js";
+import {LogLevel, LogMessage} from "../../lib/resources/state-manager.js";
+import {iCPSError} from "../error/error.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SMTP_TIMEOUT_MS = 30 * 1000;
@@ -10,6 +12,16 @@ const SMTP_TIMEOUT_MS = 30 * 1000;
 type EmailMessage = {
     subject: string,
     text: string
+}
+
+type SyncEmailReport = {
+    startedAt: number,
+    downloadedNew: string[],
+    downloadedRedownloaded: string[],
+    hashCheckingOccurred: boolean,
+    hashCheckedCount: number,
+    hashCheckTotal?: number,
+    errors: string[],
 }
 
 class SmtpClient {
@@ -154,6 +166,7 @@ export class EmailNotifier {
     private readonly smtpClient?: SmtpClient;
     private tokenExpiryTimer?: NodeJS.Timeout;
     private lastTokenExpiryWarningDate?: string;
+    private currentSyncReport?: SyncEmailReport;
 
     constructor() {
         const smtpConfig = Resources.manager().smtpConfig;
@@ -162,6 +175,7 @@ export class EmailNotifier {
         }
 
         this.smtpClient = new SmtpClient(smtpConfig);
+        this.registerSyncReportListeners();
         this.sendStartupAuthenticationReminder()
             .catch(err => Resources.logger(this).error(`Failed to send startup authentication email: ${err}`));
         this.checkTokenExpiry()
@@ -175,6 +189,121 @@ export class EmailNotifier {
 
         Resources.events(this).on(iCPSEventCloud.TRUSTED, () => {
             this.lastTokenExpiryWarningDate = undefined;
+        });
+    }
+
+    private registerSyncReportListeners(): void {
+        if (!Resources.manager().smtpSyncReport) {
+            return;
+        }
+
+        Resources.events(this)
+            .on(iCPSEventSyncEngine.START, () => {
+                this.currentSyncReport = {
+                    startedAt: Date.now(),
+                    downloadedNew: [],
+                    downloadedRedownloaded: [],
+                    hashCheckingOccurred: false,
+                    hashCheckedCount: 0,
+                    errors: [],
+                };
+            })
+            .on(iCPSEventSyncEngine.VERIFY_LOCAL_ASSETS_PROGRESS, (checkedCount: number, totalCount: number) => {
+                const report = this.currentSyncReport;
+                if (!report || totalCount === 0) {
+                    return;
+                }
+
+                report.hashCheckingOccurred = true;
+                report.hashCheckedCount = Math.max(report.hashCheckedCount, checkedCount);
+                report.hashCheckTotal = totalCount;
+            })
+            .on(iCPSEventSyncEngine.WRITE_ASSET_DOWNLOADED, (assetName: string, reason: AssetDownloadReason) => {
+                const report = this.currentSyncReport;
+                if (!report) {
+                    return;
+                }
+
+                if (reason === `redownloaded`) {
+                    report.downloadedRedownloaded.push(assetName);
+                    return;
+                }
+
+                report.downloadedNew.push(assetName);
+            })
+            .on(iCPSState.LOG_ADDED, (logMsg: LogMessage) => {
+                const report = this.currentSyncReport;
+                if (!report || ![LogLevel.WARN, LogLevel.ERROR].includes(logMsg.level)) {
+                    return;
+                }
+
+                report.errors.push(`${logMsg.level.toUpperCase()} ${logMsg.source}: ${logMsg.message}`);
+            })
+            .on(iCPSEventSyncEngine.DONE, () => {
+                this.sendSyncReport(`success`)
+                    .catch(err => Resources.logger(this).error(`Failed to send sync result email: ${err}`));
+            })
+            .on(iCPSEventRuntimeError.SCHEDULED_ERROR, (err: iCPSError) => {
+                this.addSyncReportError(err);
+                this.sendSyncReport(`failed`)
+                    .catch(sendErr => Resources.logger(this).error(`Failed to send sync result email: ${sendErr}`));
+            })
+            .on(iCPSEventRuntimeError.HANDLED_ERROR, (err: iCPSError) => {
+                this.addSyncReportError(err);
+                this.sendSyncReport(`failed`)
+                    .catch(sendErr => Resources.logger(this).error(`Failed to send sync result email: ${sendErr}`));
+            });
+    }
+
+    private addSyncReportError(err: iCPSError): void {
+        const report = this.currentSyncReport;
+        if (!report) {
+            return;
+        }
+
+        report.errors.push(`ERROR RuntimeError: ${iCPSError.toiCPSError(err).getDescription()}`);
+    }
+
+    private async sendSyncReport(status: `success` | `failed`): Promise<void> {
+        const report = this.currentSyncReport;
+        if (!report) {
+            return;
+        }
+
+        this.currentSyncReport = undefined;
+        const downloadedNewCount = report.downloadedNew.length;
+        const downloadedRedownloadedCount = report.downloadedRedownloaded.length;
+        const downloadedTotalCount = downloadedNewCount + downloadedRedownloadedCount;
+        const errorCount = report.errors.length;
+        const finishedAt = Date.now();
+
+        await this.send({
+            subject: `iCloud Photos Sync ${status}: ${downloadedTotalCount} downloaded, ${errorCount} warning/error(s)`,
+            text: [
+                `Summary`,
+                `-------`,
+                `Status: ${status}`,
+                `Started: ${new Date(report.startedAt).toLocaleString()}`,
+                `Finished: ${new Date(finishedAt).toLocaleString()}`,
+                `Duration: ${this.formatDuration(finishedAt - report.startedAt)}`,
+                `Downloaded: ${downloadedTotalCount} file(s) (${downloadedNewCount} new, ${downloadedRedownloadedCount} redownloaded after mismatch)`,
+                `Hash checking: ${report.hashCheckingOccurred ? `yes (${report.hashCheckedCount}/${report.hashCheckTotal} kept asset(s) checked)` : `no`}`,
+                `Warnings/errors: ${errorCount}`,
+                ``,
+                `New Downloads`,
+                `-------------`,
+                this.formatList(report.downloadedNew),
+                ``,
+                `Redownloaded After Mismatch`,
+                `---------------------------`,
+                this.formatList(report.downloadedRedownloaded),
+                ``,
+                `Warnings/Errors`,
+                `---------------`,
+                this.formatList(report.errors),
+                ``,
+                `Web UI: ${this.webUiUrl}`,
+            ].join(`\n`),
         });
     }
 
@@ -231,6 +360,26 @@ export class EmailNotifier {
                 `Web UI: ${this.webUiUrl}`,
             ].join(`\n`),
         });
+    }
+
+    private formatList(items: string[]): string {
+        if (items.length === 0) {
+            return `None`;
+        }
+
+        return items.map(item => `- ${item}`).join(`\n`);
+    }
+
+    private formatDuration(durationMs: number): string {
+        const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        if (minutes === 0) {
+            return `${seconds}s`;
+        }
+
+        return `${minutes}m ${seconds}s`;
     }
 
     private async send(message: EmailMessage): Promise<void> {

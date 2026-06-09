@@ -239,6 +239,13 @@ export class ResourceManager {
     }
 
     /**
+     * @returns Whether SMTP sync result report emails should be sent
+     */
+    get smtpSyncReport(): boolean {
+        return this._resources.smtpSyncReport;
+    }
+
+    /**
      * @returns SMTP configuration, if enough options were provided to enable email notifications
      */
     get smtpConfig(): SmtpConfig | undefined {

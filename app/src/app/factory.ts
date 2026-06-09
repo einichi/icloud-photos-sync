@@ -187,6 +187,7 @@ export type iCPSAppOptions = {
     smtpFromName?: string,
     smtpTo?: string,
     smtpTokenExpiryWarningDays: number,
+    smtpSyncReport: boolean,
     notificationWebHostIp?: string,
     notificationWebExposedPort?: number,
 }
@@ -333,6 +334,10 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
             .env(`SMTP_TOKEN_EXPIRY_WARNING_DAYS`)
             .default(3)
             .argParser(commanderParsePositiveInt))
+        .addOption(new Option(`--smtp-sync-report <boolean>`, `Email a sync result report after each completed or failed sync.`)
+            .env(`SMTP_SYNC_REPORT`)
+            .default(false)
+            .argParser(commanderParseBoolean))
         .addOption(new Option(`--notification-web-host-ip <ip>`, `Docker host IP to use when rendering Web UI URLs in notification emails.`)
             .env(`NOTIFICATION_WEB_HOST_IP`)
             .default(undefined))

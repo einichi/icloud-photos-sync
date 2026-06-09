@@ -394,6 +394,7 @@ describe(`Coordination`, () => {
 describe(`Handle processing queue`, () => {
     describe(`Handle asset queue`, () => {
         let writeAssetCompleteEvent: jest.Mock<UnknownFunction>;
+        let writeAssetDownloadedEvent: jest.Mock<UnknownFunction>;
         let writeAssetErrorEvent: jest.Mock<UnknownFunction>;
         let writeAssetsEvent: jest.Mock<UnknownFunction>;
         let writeAssetStartedEvent: jest.Mock<UnknownFunction>;
@@ -406,6 +407,7 @@ describe(`Handle processing queue`, () => {
                 .mockResolvedValue();
 
             writeAssetCompleteEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED);
+            writeAssetDownloadedEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.WRITE_ASSET_DOWNLOADED);
             writeAssetErrorEvent = mockedEventManager.spyOnEvent(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR);
             writeAssetsEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.WRITE_ASSETS);
             writeAssetStartedEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.WRITE_ASSET_STARTED);
@@ -499,6 +501,8 @@ describe(`Handle processing queue`, () => {
             expect(writeAssetsEvent).toHaveBeenCalledWith(0, 1, 0);
             expect(writeAssetStartedEvent).toHaveBeenCalledTimes(1);
             expect(writeAssetStartedEvent).toHaveBeenCalledWith(`test1-edited.png`);
+            expect(writeAssetDownloadedEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetDownloadedEvent).toHaveBeenCalledWith(`test1-edited.png`, `redownloaded`);
             expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(1);
             expect(writeAssetCompleteEvent).toHaveBeenCalledWith(`test1-edited.png`);
             expect(writeAssetErrorEvent).not.toHaveBeenCalled();
@@ -524,6 +528,10 @@ describe(`Handle processing queue`, () => {
             expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `test1-edited.png`);
             expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `test2-edited.png`);
             expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(3, `test3.png`);
+            expect(writeAssetDownloadedEvent).toHaveBeenCalledTimes(3);
+            expect(writeAssetDownloadedEvent).toHaveBeenNthCalledWith(1, `test1-edited.png`, `new`);
+            expect(writeAssetDownloadedEvent).toHaveBeenNthCalledWith(2, `test2-edited.png`, `new`);
+            expect(writeAssetDownloadedEvent).toHaveBeenNthCalledWith(3, `test3.png`, `new`);
 
             expect(writeAssetErrorEvent).not.toHaveBeenCalled();
 

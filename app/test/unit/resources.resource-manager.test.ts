@@ -560,6 +560,12 @@ describe(`ResourceManager`, () => {
                 expect(resourceManager.smtpConfig).toBeUndefined();
             });
 
+            test(`should return sync report email setting`, () => {
+                resourceManager._resources.smtpSyncReport = true;
+
+                expect(resourceManager.smtpSyncReport).toEqual(true);
+            });
+
             test(`should parse SMTP configuration recipients`, () => {
                 resourceManager._resources.smtpHost = `smtp.example.com`;
                 resourceManager._resources.smtpPort = 587;

@@ -35,6 +35,7 @@ The `latest` tag should always represent the latest stable release, whereas the 
               # SMTP_FROM: "photos-sync@example.com"
               # SMTP_FROM_NAME: "iCloud Photos Sync"
               # SMTP_TO: "you@example.com"
+              # SMTP_SYNC_REPORT: "true"
               # NOTIFICATION_WEB_HOST_IP: "192.168.1.50"
               # NOTIFICATION_WEB_EXPOSED_PORT: 8081
             ports:
@@ -47,7 +48,7 @@ The `latest` tag should always represent the latest stable release, whereas the 
             Apple ID credentials can be supplied from the Web UI after startup. They are kept in memory only and must be entered again after every service restart. If you prefer unattended startup, set `APPLE_ID_USER` and `APPLE_ID_PWD` in the environment; those startup credentials take precedence over Web UI credentials.
 
         !!! tip "Notification emails"
-            Optional SMTP notifications can remind you to authenticate after a service restart and warn when the stored iCloud MFA token is nearing expiry. See the [Notifications guide](user-guides/notifications.md) for all supported SMTP and notification URL variables.
+            Optional SMTP notifications can remind you to authenticate after a service restart, warn when the stored iCloud MFA token is nearing expiry, and send sync result reports. See the [Notifications guide](user-guides/notifications.md) for all supported SMTP and notification URL variables.
 
         !!! tip "Scheduled checksum verification"
             `SCHEDULED_CHECKSUM_VERIFICATION` controls whether scheduled syncs verify checksums for local assets that otherwise match iCloud metadata. It defaults to `true`. `SCHEDULED_CHECKSUM_VERIFICATION_DAYS` narrows that verification to specific numeric weekdays (`0` is Sunday, `6` is Saturday) and defaults to every day. Web UI-triggered syncs and one-off CLI syncs always verify checksums.
