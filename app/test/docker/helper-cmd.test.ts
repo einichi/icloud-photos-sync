@@ -63,12 +63,12 @@ Options:
                                    one-off syncs always verify checksums.
                                    (default: true, env:
                                    SCHEDULED_CHECKSUM_VERIFICATION)
-  --scheduled-checksum-verification-days <days>
-                                   Comma-separated cron-style weekdays when
-                                   scheduled syncs should verify checksums,
-                                   where 0 is Sunday and 6 is Saturday.
-                                   (default: 0,1,2,3,4,5,6, env:
-                                   SCHEDULED_CHECKSUM_VERIFICATION_DAYS)
+  --scheduled-checksum-verification-cron <cron-string>
+                                   Cron schedule for scheduled syncs that
+                                   should verify checksums. Must match the
+                                   scheduled sync run time. (default: "0 2 * *
+                                   *", env:
+                                   SCHEDULED_CHECKSUM_VERIFICATION_CRON)
   --enable-crash-reporting         Enables automatic collection of errors and
                                    crashes, see
                                    https://icps.steiler.dev/error-reporting/ for

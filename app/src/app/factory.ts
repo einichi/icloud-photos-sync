@@ -58,24 +58,6 @@ function commanderParseBoolean(value: string): boolean {
 }
 
 /**
- * This function can be used as a commander argParser. It parses a comma-separated list of cron-style weekdays.
- * @param value - The string literal, read from the CLI or environment
- * @returns Sorted unique weekday numbers, where 0 is Sunday and 6 is Saturday
- * @throws An InvalidArgumentError in case parsing failed
- */
-function commanderParseWeekdays(value: string): number[] {
-    const weekdays = value.split(`,`)
-        .map(day => day.trim());
-
-    if (weekdays.length === 0 || weekdays.some(day => !/^[0-6]$/.test(day))) {
-        throw new InvalidArgumentError(`Not a valid weekday list. Use comma-separated numbers from 0-6, where 0 is Sunday and 6 is Saturday.`);
-    }
-
-    return Array.from(new Set(weekdays.map(day => parseInt(day, 10))))
-        .sort((a, b) => a - b);
-}
-
-/**
  * Tries parsing a string as Cron schedule
  * @param value - The string literal, read from the CLI
  * @param _dummyPrevious - Conforming to the interface - unused
@@ -161,7 +143,7 @@ export type iCPSAppOptions = {
     downloadTimeout: number,
     schedule: string,
     scheduledChecksumVerification: boolean,
-    scheduledChecksumVerificationDays: number[],
+    scheduledChecksumVerificationCron: string,
     enableCrashReporting: boolean,
     enableNetworkCapture: boolean,
     mfaTimeout: number,
@@ -246,10 +228,10 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
             .env(`SCHEDULED_CHECKSUM_VERIFICATION`)
             .default(true)
             .argParser(commanderParseBoolean))
-        .addOption(new Option(`--scheduled-checksum-verification-days <days>`, `Comma-separated cron-style weekdays when scheduled syncs should verify checksums, where 0 is Sunday and 6 is Saturday.`)
-            .env(`SCHEDULED_CHECKSUM_VERIFICATION_DAYS`)
-            .default([0, 1, 2, 3, 4, 5, 6], `0,1,2,3,4,5,6`)
-            .argParser(commanderParseWeekdays))
+        .addOption(new Option(`--scheduled-checksum-verification-cron <cron-string>`, `Cron schedule for scheduled syncs that should verify checksums. Must match the scheduled sync run time.`)
+            .env(`SCHEDULED_CHECKSUM_VERIFICATION_CRON`)
+            .default(`0 2 * * *`)
+            .argParser(commanderParseCron))
         .addOption(new Option(`--enable-crash-reporting`, `Enables automatic collection of errors and crashes, see https://icps.steiler.dev/error-reporting/ for more information.`)
             .env(`ENABLE_CRASH_REPORTING`)
             .default(false))

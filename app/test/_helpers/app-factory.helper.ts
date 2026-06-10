@@ -225,11 +225,11 @@ export const rejectOptions = [
             `test@icloud.com`,
             `-p`,
             `testPass`,
-            `--scheduled-checksum-verification-days`,
-            `7`,
+            `--scheduled-checksum-verification-cron`,
+            `asdf`,
         ],
-        _desc: `Invalid scheduled checksum verification weekday`,
-        expected: `error: option '--scheduled-checksum-verification-days <days>' argument '7' is invalid. Not a valid weekday list. Use comma-separated numbers from 0-6, where 0 is Sunday and 6 is Saturday.`,
+        _desc: `Invalid scheduled checksum verification cron`,
+        expected: `error: option '--scheduled-checksum-verification-cron <cron-string>' argument 'asdf' is invalid. Not a valid cron pattern. See https://crontab.guru (or for more information on the underlying implementation https://github.com/hexagon/croner#pattern).`,
     }, {
         options: [
             `/usr/bin/node`,
@@ -238,11 +238,11 @@ export const rejectOptions = [
             `test@icloud.com`,
             `-p`,
             `testPass`,
-            `--scheduled-checksum-verification-days`,
-            `sun`,
+            `--scheduled-checksum-verification-cron`,
+            `61 2 * * *`,
         ],
-        _desc: `Invalid scheduled checksum verification weekday name`,
-        expected: `error: option '--scheduled-checksum-verification-days <days>' argument 'sun' is invalid. Not a valid weekday list. Use comma-separated numbers from 0-6, where 0 is Sunday and 6 is Saturday.`,
+        _desc: `Invalid scheduled checksum verification cron minute`,
+        expected: `error: option '--scheduled-checksum-verification-cron <cron-string>' argument '61 2 * * *' is invalid. Not a valid cron pattern. See https://crontab.guru (or for more information on the underlying implementation https://github.com/hexagon/croner#pattern).`,
     }, {
         options: [
             `/usr/bin/node`,
@@ -445,12 +445,12 @@ export const nonRejectOptions = [
             `test@icloud.com`,
             `-p`,
             `testPass`,
-            `--scheduled-checksum-verification-days`,
-            `6,0,6`,
+            `--scheduled-checksum-verification-cron`,
+            `0 2 * * 0`,
         ],
-        _desc: `Scheduled checksum verification weekdays set`,
+        _desc: `Scheduled checksum verification cron set`,
         expectedOptions: {
-            scheduledChecksumVerificationDays: [0, 6],
+            scheduledChecksumVerificationCron: `0 2 * * 0`,
         },
     }, {
         options: [

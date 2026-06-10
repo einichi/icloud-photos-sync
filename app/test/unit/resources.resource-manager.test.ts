@@ -815,9 +815,9 @@ describe(`ResourceManager`, () => {
             });
         });
 
-        describe(`scheduledChecksumVerificationDays`, () => {
-            test(`should return the scheduled checksum verification weekdays from the resources`, () => {
-                expect(resourceManager.scheduledChecksumVerificationDays).toEqual(resources.scheduledChecksumVerificationDays);
+        describe(`scheduledChecksumVerificationCron`, () => {
+            test(`should return the scheduled checksum verification cron from the resources`, () => {
+                expect(resourceManager.scheduledChecksumVerificationCron).toEqual(resources.scheduledChecksumVerificationCron);
             });
         });
 

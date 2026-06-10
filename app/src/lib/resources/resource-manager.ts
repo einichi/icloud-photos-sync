@@ -440,10 +440,10 @@ export class ResourceManager {
     }
 
     /**
-     * @returns Weekdays when scheduled syncs should checksum-verify already-present local assets
+     * @returns Cron schedule for scheduled syncs that should checksum-verify already-present local assets
      */
-    get scheduledChecksumVerificationDays(): number[] {
-        return this._resources.scheduledChecksumVerificationDays;
+    get scheduledChecksumVerificationCron(): string {
+        return this._resources.scheduledChecksumVerificationCron;
     }
 
     /**

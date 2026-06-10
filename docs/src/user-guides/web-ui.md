@@ -12,7 +12,7 @@ services:
       TZ: "Europe/Berlin"                                                       
       SCHEDULE: "* 2 * * *"
       SCHEDULED_CHECKSUM_VERIFICATION: true
-      SCHEDULED_CHECKSUM_VERIFICATION_DAYS: "0,1,2,3,4,5,6"
+      SCHEDULED_CHECKSUM_VERIFICATION_CRON: "0 2 * * 0"
       ENABLE_CRASH_REPORTING: true
     volumes:
       - <photos-dir>:/opt/icloud-photos-library
@@ -54,6 +54,6 @@ When an MFA token is available, the ready page shows an estimated expiry countdo
 
 Optional SMTP notifications can also be enabled to email you when the service starts without in-memory credentials and when the MFA token is nearing expiry. See [Notifications](notifications.md).
 
-Scheduled syncs verify checksums for kept local assets by default. Set `SCHEDULED_CHECKSUM_VERIFICATION` to `false` to skip that verification for scheduled syncs only. To run verification only on selected scheduled-run weekdays, set `SCHEDULED_CHECKSUM_VERIFICATION_DAYS` to comma-separated numbers from `0` through `6`, where `0` is Sunday and `6` is Saturday. Web UI-triggered syncs and one-off CLI syncs always verify checksums.
+Scheduled syncs verify checksums for kept local assets by default. Set `SCHEDULED_CHECKSUM_VERIFICATION` to `false` to skip that verification for scheduled syncs only. To run verification only on selected scheduled runs, set `SCHEDULED_CHECKSUM_VERIFICATION_CRON` to a cron expression that matches those scheduled run times, for example `0 2 * * 0` for Sunday 02:00. Web UI-triggered syncs and one-off CLI syncs always verify checksums.
 
 While a sync is running, the Web UI progress bar reflects overall sync progress while advancing inside the current phase. Remote metadata fetches, local checksum verification, and asset downloads also show detail below the main status text, including the currently downloading filename when available.

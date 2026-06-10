@@ -624,18 +624,18 @@ describe(`App control flow`, () => {
             }
         });
 
-        test(`Scheduled sync verifies checksums on configured weekday`, async () => {
+        test(`Scheduled sync verifies checksums when verification cron matches run time`, async () => {
             const daemonApp = await appFactory(validOptions.daemon) as DaemonApp;
             Resources._instances.manager._resources.scheduledChecksumVerification = true;
-            Resources._instances.manager._resources.scheduledChecksumVerificationDays = [1];
+            Resources._instances.manager._resources.scheduledChecksumVerificationCron = `0 2 * * 1`;
 
             expect((daemonApp as any).shouldVerifyScheduledChecksums(new Date(`2026-06-08T02:00:00`))).toBe(true);
         });
 
-        test(`Scheduled sync skips checksums on non-configured weekday`, async () => {
+        test(`Scheduled sync skips checksums when verification cron does not match run time`, async () => {
             const daemonApp = await appFactory(validOptions.daemon) as DaemonApp;
             Resources._instances.manager._resources.scheduledChecksumVerification = true;
-            Resources._instances.manager._resources.scheduledChecksumVerificationDays = [0];
+            Resources._instances.manager._resources.scheduledChecksumVerificationCron = `0 2 * * 0`;
 
             expect((daemonApp as any).shouldVerifyScheduledChecksums(new Date(`2026-06-08T02:00:00`))).toBe(false);
         });
