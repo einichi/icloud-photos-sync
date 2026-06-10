@@ -809,12 +809,6 @@ describe(`ResourceManager`, () => {
             });
         });
 
-        describe(`scheduledChecksumVerification`, () => {
-            test(`should return the scheduled checksum verification flag from the resources`, () => {
-                expect(resourceManager.scheduledChecksumVerification).toEqual(resources.scheduledChecksumVerification);
-            });
-        });
-
         describe(`scheduledChecksumVerificationCron`, () => {
             test(`should return the scheduled checksum verification cron from the resources`, () => {
                 expect(resourceManager.scheduledChecksumVerificationCron).toEqual(resources.scheduledChecksumVerificationCron);

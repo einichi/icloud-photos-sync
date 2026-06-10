@@ -57,17 +57,10 @@ Options:
                                    it will use this cron schedule to perform
                                    regular sync operations. (default: "0 2 * *
                                    *", env: SCHEDULE)
-  --scheduled-checksum-verification <boolean>
-                                   Verify checksums of already-present local
-                                   assets during scheduled syncs. Web UI and
-                                   one-off syncs always verify checksums.
-                                   (default: true, env:
-                                   SCHEDULED_CHECKSUM_VERIFICATION)
   --scheduled-checksum-verification-cron <cron-string>
                                    Cron schedule for scheduled syncs that
-                                   should verify checksums. Must match the
-                                   scheduled sync run time. (default: "0 2 * *
-                                   *", env:
+                                   should verify checksums. Scheduled syncs
+                                   skip checksum verification when unset. (env:
                                    SCHEDULED_CHECKSUM_VERIFICATION_CRON)
   --enable-crash-reporting         Enables automatic collection of errors and
                                    crashes, see

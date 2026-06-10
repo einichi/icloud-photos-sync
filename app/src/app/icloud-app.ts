@@ -80,12 +80,13 @@ export class DaemonApp extends iCPSApp {
     }
 
     private shouldVerifyScheduledChecksums(runDate: Date = new Date()): boolean {
-        if (!Resources.manager().scheduledChecksumVerification) {
+        const verificationCron = Resources.manager().scheduledChecksumVerificationCron;
+        if (!verificationCron) {
             return false;
         }
 
         const runMinute = this.withoutSeconds(runDate);
-        const checksumJob = new Cron(Resources.manager().scheduledChecksumVerificationCron, {paused: true});
+        const checksumJob = new Cron(verificationCron, {paused: true});
         const nextChecksumRun = checksumJob.nextRun(new Date(runMinute.getTime() - 1000));
         checksumJob.stop();
 

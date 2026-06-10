@@ -433,16 +433,9 @@ export class ResourceManager {
     }
 
     /**
-     * @returns If scheduled syncs should checksum-verify already-present local assets
-     */
-    get scheduledChecksumVerification(): boolean {
-        return this._resources.scheduledChecksumVerification;
-    }
-
-    /**
      * @returns Cron schedule for scheduled syncs that should checksum-verify already-present local assets
      */
-    get scheduledChecksumVerificationCron(): string {
+    get scheduledChecksumVerificationCron(): string | undefined {
         return this._resources.scheduledChecksumVerificationCron;
     }
 

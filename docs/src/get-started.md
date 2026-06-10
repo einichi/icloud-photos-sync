@@ -26,7 +26,6 @@ The `latest` tag should always represent the latest stable release, whereas the 
             environment:
               TZ: "Europe/Berlin"                                                       
               SCHEDULE: "0 2 * * *"
-              SCHEDULED_CHECKSUM_VERIFICATION: true
               SCHEDULED_CHECKSUM_VERIFICATION_CRON: "0 2 * * 0"
               ENABLE_CRASH_REPORTING: true
               # Optional email notifications. See User Guides > Notifications.
@@ -51,7 +50,7 @@ The `latest` tag should always represent the latest stable release, whereas the 
             Optional SMTP notifications can remind you to authenticate after a service restart, warn when the stored iCloud MFA token is nearing expiry, and send sync result reports. See the [Notifications guide](user-guides/notifications.md) for all supported SMTP and notification URL variables.
 
         !!! tip "Scheduled checksum verification"
-            `SCHEDULED_CHECKSUM_VERIFICATION` controls whether scheduled syncs verify checksums for local assets that otherwise match iCloud metadata. It defaults to `true`. `SCHEDULED_CHECKSUM_VERIFICATION_CRON` narrows that verification to scheduled runs matching a cron expression, for example `0 2 * * 0` for Sunday 02:00. Web UI-triggered syncs and one-off CLI syncs always verify checksums.
+            `SCHEDULED_CHECKSUM_VERIFICATION_CRON` controls which scheduled syncs verify checksums for local assets that otherwise match iCloud metadata. Leave it unset to skip checksum verification for scheduled syncs. Set it to a cron expression matching scheduled runs, for example `0 2 * * 0` for Sunday 02:00. Web UI-triggered syncs and one-off CLI syncs always verify checksums.
 
         Get the latest image by running:
 

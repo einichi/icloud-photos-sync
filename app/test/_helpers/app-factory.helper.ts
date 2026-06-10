@@ -430,12 +430,12 @@ export const nonRejectOptions = [
             `test@icloud.com`,
             `-p`,
             `testPass`,
-            `--scheduled-checksum-verification`,
-            `false`,
+            `--scheduled-checksum-verification-cron`,
+            `0 2 * * 0`,
         ],
-        _desc: `Scheduled checksum verification disabled`,
+        _desc: `Scheduled checksum verification cron set`,
         expectedOptions: {
-            scheduledChecksumVerification: false,
+            scheduledChecksumVerificationCron: `0 2 * * 0`,
         },
     }, {
         options: [
@@ -446,11 +446,11 @@ export const nonRejectOptions = [
             `-p`,
             `testPass`,
             `--scheduled-checksum-verification-cron`,
-            `0 2 * * 0`,
+            ``,
         ],
-        _desc: `Scheduled checksum verification cron set`,
+        _desc: `Scheduled checksum verification cron unset`,
         expectedOptions: {
-            scheduledChecksumVerificationCron: `0 2 * * 0`,
+            scheduledChecksumVerificationCron: undefined,
         },
     }, {
         options: [

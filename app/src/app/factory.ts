@@ -75,6 +75,20 @@ function commanderParseCron(value: string, _dummyPrevious?: unknown): string {
 }
 
 /**
+ * Tries parsing a string as an optional Cron schedule
+ * @param value - The string literal, read from the CLI
+ * @returns The original string, or undefined if empty
+ * @throws An InvalidArgumentError in case parsing failed
+ */
+function commanderParseOptionalCron(value: string): string | undefined {
+    if (value.trim().length === 0) {
+        return undefined;
+    }
+
+    return commanderParseCron(value);
+}
+
+/**
  * This function can be used as a commander argParser. It will try to parse the value as an interval with the format \<numberOfRequests|Infinity\>/\<timeInMs\>.
  * @param value - The string literal, read from the CLI
  * @param _dummyPrevious - Conforming to the interface - unused
@@ -123,6 +137,9 @@ function commanderParseUrl(value: string, _dummyPrevious?: unknown): string {
 async function completeConfigurationOptionsFromCommand(parsedCommand: unknown): Promise<iCPSAppOptions> {
     const opts = (parsedCommand as any).parent?.opts() as iCPSAppOptions;
     opts.credentialsProvidedAtStartup = Boolean(opts.username && opts.password);
+    if (opts.scheduledChecksumVerificationCron?.trim().length === 0) {
+        opts.scheduledChecksumVerificationCron = undefined;
+    }
 
     return opts;
 }
@@ -142,8 +159,7 @@ export type iCPSAppOptions = {
     downloadThreads: number,
     downloadTimeout: number,
     schedule: string,
-    scheduledChecksumVerification: boolean,
-    scheduledChecksumVerificationCron: string,
+    scheduledChecksumVerificationCron?: string,
     enableCrashReporting: boolean,
     enableNetworkCapture: boolean,
     mfaTimeout: number,
@@ -224,14 +240,10 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
             .env(`SCHEDULE`)
             .default(`0 2 * * *`)
             .argParser(commanderParseCron))
-        .addOption(new Option(`--scheduled-checksum-verification <boolean>`, `Verify checksums of already-present local assets during scheduled syncs. Web UI and one-off syncs always verify checksums.`)
-            .env(`SCHEDULED_CHECKSUM_VERIFICATION`)
-            .default(true)
-            .argParser(commanderParseBoolean))
-        .addOption(new Option(`--scheduled-checksum-verification-cron <cron-string>`, `Cron schedule for scheduled syncs that should verify checksums. Must match the scheduled sync run time.`)
+        .addOption(new Option(`--scheduled-checksum-verification-cron <cron-string>`, `Cron schedule for scheduled syncs that should verify checksums. Scheduled syncs skip checksum verification when unset.`)
             .env(`SCHEDULED_CHECKSUM_VERIFICATION_CRON`)
-            .default(`0 2 * * *`)
-            .argParser(commanderParseCron))
+            .default(undefined)
+            .argParser(commanderParseOptionalCron))
         .addOption(new Option(`--enable-crash-reporting`, `Enables automatic collection of errors and crashes, see https://icps.steiler.dev/error-reporting/ for more information.`)
             .env(`ENABLE_CRASH_REPORTING`)
             .default(false))
