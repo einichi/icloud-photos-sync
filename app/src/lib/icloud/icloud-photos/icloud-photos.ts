@@ -9,6 +9,7 @@ import {iCPSEventPhotos, iCPSEventRuntimeWarning} from '../../resources/events-t
 import {Resources} from '../../resources/main.js';
 import {ENDPOINTS, PhotosSetupResponseZone} from '../../resources/network-types.js';
 import {SyncEngineHelper} from '../../sync-engine/helper.js';
+import {SyncRetryPolicy} from '../../sync-engine/retry-policy.js';
 import * as QueryBuilder from './query-builder.js';
 import {AssetID, CPLAlbum, CPLAsset, CPLMaster} from './query-parser.js';
 import {PhotosAccountZone, ZoneArea} from '../../resources/resource-types.js';
@@ -26,6 +27,12 @@ const MAX_RECORDS_LIMIT = 200;
 const PHOTO_METADATA_PAGE_CONCURRENCY = 4;
 const PHOTOS_METADATA_REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
 const EXPIRED_DOWNLOAD_URL_STATUS = 410;
+
+/**
+ * Number of attempts made to look up a record while refreshing an expired download URL, including the initial attempt.
+ */
+const URL_REFRESH_LOOKUP_ATTEMPTS = 3;
+const URL_REFRESH_LOOKUP_BACKOFF_BASE_MS = 1000;
 
 type PhotosQueryPage = {
     records: any[],
@@ -50,6 +57,11 @@ export class iCloudPhotos {
      * Counter used to correlate verbose query start, completion and failure logs.
      */
     queryTraceCounter: number = 0;
+
+    /**
+     * Used to classify transient (e.g. session-expiry related) errors encountered while refreshing download URLs.
+     */
+    private readonly retryPolicy = new SyncRetryPolicy();
 
     /**
      * Creates a new iCloud Photos Class
@@ -449,6 +461,33 @@ export class iCloudPhotos {
 
         Resources.logger(this).debug(`Looked up ${fetchedRecords.length} iCloud Photos record(s) in ${Date.now() - startedAt}ms`);
         return fetchedRecords;
+    }
+
+    /**
+     * Performs a lookup, retrying on transient errors (e.g. an expired session returning HTTP 421).
+     * Used while refreshing download URLs, where a single failed lookup would otherwise drop the asset for the whole sync run.
+     * @param zone - Defines the zone to be used
+     * @param recordNames - Record names to look up
+     * @param desiredKeys - Optional desired fields to reduce the lookup response
+     * @returns The records returned by the backend
+     */
+    private async performLookupWithRetry(zone: QueryBuilder.Zones, recordNames: string[], desiredKeys?: string[]): Promise<any[]> {
+        for (let attempt = 1; attempt <= URL_REFRESH_LOOKUP_ATTEMPTS; attempt++) {
+            try {
+                return await this.performLookup(zone, recordNames, desiredKeys);
+            } catch (err) {
+                if (attempt === URL_REFRESH_LOOKUP_ATTEMPTS || !this.retryPolicy.isRetryableSyncError(err)) {
+                    throw err;
+                }
+
+                const backoffMs = URL_REFRESH_LOOKUP_BACKOFF_BASE_MS * (2 ** (attempt - 1));
+                Resources.logger(this).debug(`Lookup failed (attempt ${attempt}/${URL_REFRESH_LOOKUP_ATTEMPTS}), retrying in ${backoffMs}ms`);
+                await new Promise(resolve => setTimeout(resolve, backoffMs));
+            }
+        }
+
+        throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
+            .addMessage(`exhausted retries for ${recordNames.join(`, `)}`);
     }
 
     /**
@@ -920,7 +959,7 @@ export class iCloudPhotos {
                     .addMessage(`missing download record name`);
             }
 
-            const [record] = await this.performLookup(asset.zone, [downloadRecordName], QueryBuilder.QUERY_KEYS);
+            const [record] = await this.performLookupWithRetry(asset.zone, [downloadRecordName], QueryBuilder.QUERY_KEYS);
             if (!record) {
                 throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
                     .addMessage(`no record returned for ${downloadRecordName}`);
@@ -953,7 +992,7 @@ export class iCloudPhotos {
             }
 
             asset.downloadRecordName = masterRecordName;
-            const [masterRecord] = await this.performLookup(asset.zone, [masterRecordName], QueryBuilder.QUERY_KEYS);
+            const [masterRecord] = await this.performLookupWithRetry(asset.zone, [masterRecordName], QueryBuilder.QUERY_KEYS);
             if (!masterRecord) {
                 throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
                     .addMessage(`no master record returned for ${masterRecordName}`);
