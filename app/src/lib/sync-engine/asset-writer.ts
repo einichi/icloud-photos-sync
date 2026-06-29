@@ -31,7 +31,6 @@ export class AssetWriter {
         const invalidKeptAssets = this.options.verifyKeptAssetChecksums
             ? await this.getInvalidKeptAssets(processingQueue[2])
             : [];
-        const invalidKeptAssetPaths = new Set(invalidKeptAssets.map(asset => asset.getAssetFilePath()));
         const toBeAdded = this.getUniqueAssets([
             ...processingQueue[1],
             ...invalidKeptAssets,
@@ -69,10 +68,7 @@ export class AssetWriter {
         const workerCount = Math.min(configuredWorkerCount, toBeAdded.length);
         await Promise.all(Array.from({length: workerCount}, async () => {
             for (let next = nextAsset.next(); !next.done; next = nextAsset.next()) {
-                const downloadReason: AssetDownloadReason = invalidKeptAssetPaths.has(next.value.getAssetFilePath())
-                    ? `redownloaded`
-                    : `new`;
-                await this.addAsset(next.value, downloadReason);
+                await this.addAsset(next.value);
                 logAssetWriteProgress();
             }
         }));
@@ -103,11 +99,15 @@ export class AssetWriter {
     /**
      * Downloads and stores a given asset, unless a valid file is already present on disk.
      * @param asset - The asset that needs to be downloaded
-     * @param downloadReason - Why the asset was queued for download
      * @returns A promise that resolves once the file has been successfully written to disk
      */
-    async addAsset(asset: Asset, downloadReason: AssetDownloadReason = `new`) {
+    async addAsset(asset: Asset) {
         const assetProgressDisplayName = this.getAssetProgressDisplayName(asset);
+        // Captured before any verification or cleanup deletes the existing file: a download that replaces a file already
+        // on disk is a redownload (the local copy was missing, corrupted, or no longer matched iCloud), as opposed to a
+        // genuinely new asset. This is determined from disk so it covers size/modification-time mismatches too, not just
+        // kept assets that failed checksum verification.
+        const replacedExistingAsset = await this.assetFilePresent(asset);
         try {
             if (await this.hasValidLocalAsset(asset)) {
                 Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, assetProgressDisplayName);
@@ -123,8 +123,23 @@ export class AssetWriter {
             return;
         }
 
+        const downloadReason: AssetDownloadReason = replacedExistingAsset ? `redownloaded` : `new`;
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_DOWNLOADED, assetProgressDisplayName, downloadReason);
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, assetProgressDisplayName);
+    }
+
+    /**
+     * Checks whether a file already occupies the asset's target path on disk.
+     * @param asset - The asset being written
+     * @returns True if a file is already present at the asset's path
+     */
+    private async assetFilePresent(asset: Asset): Promise<boolean> {
+        try {
+            await fs.stat(asset.getAssetFilePath());
+            return true;
+        } catch (_err) {
+            return false;
+        }
     }
 
     /**

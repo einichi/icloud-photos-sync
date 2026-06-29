@@ -485,13 +485,15 @@ describe(`Handle processing queue`, () => {
 
         test(`Redownloads kept asset that fails verification`, async () => {
             const asset = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
+            // A kept asset exists on disk; it fails verification during the kept-asset check and again before redownloading
+            mockfs({[asset.getAssetFilePath()]: `corrupted`});
             asset.verify = jest.fn<typeof asset.verify>()
+                .mockRejectedValueOnce(new Error(`checksum error`))
                 .mockRejectedValueOnce(new Error(`checksum error`))
                 .mockResolvedValueOnce(true);
 
             await syncEngine.writeAssets([[], [], [asset]]);
 
-            expect(asset.verify).toHaveBeenCalledTimes(2);
             expect(verifyLocalAssetsProgressEvent).toHaveBeenCalledTimes(2);
             expect(verifyLocalAssetsProgressEvent).toHaveBeenNthCalledWith(1, 0, 1, `test1-edited.png`);
             expect(verifyLocalAssetsProgressEvent).toHaveBeenNthCalledWith(2, 1, 1);
@@ -505,6 +507,24 @@ describe(`Handle processing queue`, () => {
             expect(writeAssetDownloadedEvent).toHaveBeenCalledWith(`test1-edited.png`, `redownloaded`);
             expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(1);
             expect(writeAssetCompleteEvent).toHaveBeenCalledWith(`test1-edited.png`);
+            expect(writeAssetErrorEvent).not.toHaveBeenCalled();
+        });
+
+        test(`Reports a replaced existing asset as redownloaded, even without checksum verification`, async () => {
+            // The asset comes through the diff as an add (e.g. size/modification-time mismatch), not via kept-asset
+            // checksum verification, but a stale local file is still present and gets replaced - so it is a redownload.
+            const asset = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
+            mockfs({[asset.getAssetFilePath()]: `stale`});
+            asset.verify = jest.fn<typeof asset.verify>()
+                .mockRejectedValueOnce(new Error(`size mismatch`))
+                .mockResolvedValueOnce(true);
+
+            await syncEngine.writeAssets([[], [asset], []]);
+
+            expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledWith(asset);
+            expect(writeAssetDownloadedEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetDownloadedEvent).toHaveBeenCalledWith(`test1-edited.png`, `redownloaded`);
             expect(writeAssetErrorEvent).not.toHaveBeenCalled();
         });
 
