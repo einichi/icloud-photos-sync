@@ -531,6 +531,61 @@ describe.each([
     });
 });
 
+describe(`Lookup with retry`, () => {
+    const lookupURL = `https://p123-ckdatabasews.icloud.com:443/database/1/com.apple.photos.cloud/production/private/records/lookup`;
+    const recordNames = [`recordA`];
+
+    beforeEach(() => {
+        mockedResourceManager._resources.primaryZone = {
+            ...Config.primaryZone,
+            area: `PRIVATE` as ZoneArea,
+        };
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    test(`Recovers from a transient session-expiry error`, async () => {
+        mockedNetworkManager.mock
+            .onPost(lookupURL)
+            .replyOnce(421)
+            .onPost(lookupURL)
+            .replyOnce(200, {records: [`recordA`]});
+
+        const lookupPromise = (photos as any).performLookupWithRetry(Zones.Primary, recordNames);
+        await jest.advanceTimersByTimeAsync(1000);
+
+        await expect(lookupPromise).resolves.toEqual([`recordA`]);
+        expect(mockedNetworkManager.mock.history.post).toHaveLength(2);
+    });
+
+    test(`Gives up after exhausting retries on a persistent session-expiry error`, async () => {
+        mockedNetworkManager.mock
+            .onPost(lookupURL)
+            .reply(421);
+
+        const lookupPromise = (photos as any).performLookupWithRetry(Zones.Primary, recordNames);
+        const assertion = expect(lookupPromise).rejects.toThrow();
+        await jest.advanceTimersByTimeAsync(1000 + 2000);
+
+        await assertion;
+        expect(mockedNetworkManager.mock.history.post).toHaveLength(3);
+    });
+
+    test(`Does not retry non-retryable errors`, async () => {
+        mockedNetworkManager.mock
+            .onPost(lookupURL)
+            .reply(404);
+
+        const lookupPromise = (photos as any).performLookupWithRetry(Zones.Primary, recordNames);
+
+        await expect(lookupPromise).rejects.toThrow();
+        expect(mockedNetworkManager.mock.history.post).toHaveLength(1);
+    });
+});
+
 // Describe(`Fetch records`, () => {
 //     // Test invalid extension
 // });
