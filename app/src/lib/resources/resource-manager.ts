@@ -468,6 +468,13 @@ export class ResourceManager {
     }
 
     /**
+     * @returns If the application should maintain human-readable, original-filename symlink folders for all assets
+     */
+    get allPhotosByName(): boolean {
+        return this._resources.allPhotosByName;
+    }
+
+    /**
      * @returns The log level of the application
      */
     get logLevel(): LogLevel {

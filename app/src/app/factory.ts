@@ -166,6 +166,7 @@ export type iCPSAppOptions = {
     force: boolean,
     refreshToken: boolean,
     remoteDelete: boolean,
+    allPhotosByName: boolean,
     logLevel: LogLevel,
     silent: boolean,
     logToCli: boolean,
@@ -259,6 +260,9 @@ export function argParser(callback: (res: iCPSApp) => void): Command {
             .default(false))
         .addOption(new Option(`--remote-delete`, `If this flag is set, delete non-favorite photos in the iCloud Photos backend upon archiving.`)
             .env(`REMOTE_DELETE`)
+            .default(false))
+        .addOption(new Option(`--all-photos-by-name`, `Maintain '_All-Photos-by-name' / '_Shared-Photos-by-name' folders, where every asset is symlinked under its original filename (de-duplicated with a numeric suffix) pointing at the checksum-named file.`)
+            .env(`ALL_PHOTOS_BY_NAME`)
             .default(false))
         .addOption(new Option(`-l, --log-level <level>`, `Set the log level.`)
             .env(`LOG_LEVEL`)

@@ -18,6 +18,7 @@ export const defaultConfig = {
     force: false,
     refreshToken: false,
     remoteDelete: false,
+    allPhotosByName: false,
     logLevel: `info`,
     silent: false,
     logToCli: false,

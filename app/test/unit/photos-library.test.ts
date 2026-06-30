@@ -3,10 +3,10 @@ import fs from 'fs';
 import mockfs from 'mock-fs';
 import path from 'path';
 import {Zones} from '../../src/lib/icloud/icloud-photos/query-builder';
-import {ARCHIVE_DIR, PRIMARY_ASSET_DIR, SHARED_ASSET_DIR, STASH_DIR} from '../../src/lib/photos-library/constants';
+import {ARCHIVE_DIR, PRIMARY_ASSET_DIR, PRIMARY_ASSET_DIR_BY_NAME, SHARED_ASSET_DIR, SHARED_ASSET_DIR_BY_NAME, STASH_DIR} from '../../src/lib/photos-library/constants';
 import {AssetChecksum} from '../../src/lib/photos-library/asset-checksum';
 import {Album, AlbumType} from '../../src/lib/photos-library/model/album';
-import {Asset} from '../../src/lib/photos-library/model/asset';
+import {Asset, AssetType} from '../../src/lib/photos-library/model/asset';
 import {FileType} from '../../src/lib/photos-library/model/file-type';
 import {PhotosLibrary} from '../../src/lib/photos-library/photos-library';
 import {iCPSEventRuntimeWarning} from '../../src/lib/resources/events-types';
@@ -1902,5 +1902,98 @@ describe(`Write state`, () => {
                 });
             });
         });
+    });
+});
+
+describe(`Write assets by name`, () => {
+    const primaryByNameDir = path.join(Config.defaultConfig.dataDir, PRIMARY_ASSET_DIR_BY_NAME);
+    const sharedByNameDir = path.join(Config.defaultConfig.dataDir, SHARED_ASSET_DIR_BY_NAME);
+    const assetMTime = 1640995200000; // 01.01.2022
+
+    /**
+     * Builds an asset with a deterministic checksum derived from the provided seed byte.
+     */
+    const buildAsset = (seed: number, origFilename: string, assetType: AssetType, zone: Zones = Zones.Primary, ext = `jpeg`) => {
+        const data = Buffer.from([seed, seed, seed, seed]);
+        const checksum = AssetChecksum.forBuffer(data);
+        const asset = new Asset(checksum, data.length, FileType.fromExtension(ext), assetMTime, zone, assetType, origFilename);
+        return {asset, checksum, data, fileName: `${checksumToFileName(checksum)}.${ext}`};
+    };
+
+    test(`Creates symlinks named by original filename, de-duplicating deterministically`, () => {
+        // Two distinct assets sharing the original filename, plus an edited variant and a missing-file asset
+        const a = buildAsset(1, `IMG_0001`, AssetType.ORIG);
+        const b = buildAsset(2, `IMG_0001`, AssetType.ORIG);
+        const edited = buildAsset(3, `IMG_0002`, AssetType.EDIT);
+        const missing = buildAsset(4, `IMG_0003`, AssetType.ORIG);
+
+        mockfs({
+            [primaryAssetDir]: {
+                [a.fileName]: mockfs.file({content: a.data, mtime: new Date(assetMTime)}),
+                [b.fileName]: mockfs.file({content: b.data, mtime: new Date(assetMTime)}),
+                [edited.fileName]: mockfs.file({content: edited.data, mtime: new Date(assetMTime)}),
+                // missing asset's file is intentionally absent
+            },
+        });
+
+        const library = new PhotosLibrary();
+        library.writeAssetsByName([a.asset, b.asset, edited.asset, missing.asset]);
+
+        // The collision tiebreak is the checksum, so the lower checksum keeps the bare name
+        const [first, second] = [a, b].sort((x, y) => (x.checksum < y.checksum ? -1 : 1));
+        const bareLink = path.join(primaryByNameDir, `IMG_0001.jpeg`);
+        const suffixedLink = path.join(primaryByNameDir, `IMG_0001 (2).jpeg`);
+        const editedLink = path.join(primaryByNameDir, `IMG_0002-edited.jpeg`);
+
+        expect(fs.lstatSync(bareLink).isSymbolicLink()).toBeTruthy();
+        expect(path.resolve(primaryByNameDir, fs.readlinkSync(bareLink))).toEqual(path.join(primaryAssetDir, first.fileName));
+        expect(path.resolve(primaryByNameDir, fs.readlinkSync(suffixedLink))).toEqual(path.join(primaryAssetDir, second.fileName));
+        expect(path.resolve(primaryByNameDir, fs.readlinkSync(editedLink))).toEqual(path.join(primaryAssetDir, edited.fileName));
+
+        // The asset whose file is missing must not produce a (dead) symlink
+        expect(fs.existsSync(path.join(primaryByNameDir, `IMG_0003.jpeg`))).toBeFalsy();
+        expect(fs.readdirSync(primaryByNameDir).sort()).toEqual([`IMG_0001 (2).jpeg`, `IMG_0001.jpeg`, `IMG_0002-edited.jpeg`]);
+    });
+
+    test(`Rebuilds the folder each run, removing stale links`, () => {
+        const a = buildAsset(1, `IMG_0001`, AssetType.ORIG);
+        const b = buildAsset(2, `IMG_0002`, AssetType.ORIG);
+
+        mockfs({
+            [primaryAssetDir]: {
+                [a.fileName]: mockfs.file({content: a.data, mtime: new Date(assetMTime)}),
+                [b.fileName]: mockfs.file({content: b.data, mtime: new Date(assetMTime)}),
+            },
+        });
+
+        const library = new PhotosLibrary();
+        library.writeAssetsByName([a.asset, b.asset]);
+        expect(fs.readdirSync(primaryByNameDir).sort()).toEqual([`IMG_0001.jpeg`, `IMG_0002.jpeg`]);
+
+        // Second asset no longer present in the library -> its link must be pruned
+        library.writeAssetsByName([a.asset]);
+        expect(fs.readdirSync(primaryByNameDir)).toEqual([`IMG_0001.jpeg`]);
+    });
+
+    test(`Routes assets into the matching zone folder`, () => {
+        const primary = buildAsset(1, `IMG_0001`, AssetType.ORIG, Zones.Primary);
+        const shared = buildAsset(2, `IMG_0002`, AssetType.ORIG, Zones.Shared);
+
+        mockfs({
+            [primaryAssetDir]: {
+                [primary.fileName]: mockfs.file({content: primary.data, mtime: new Date(assetMTime)}),
+            },
+            [sharedAssetDir]: {
+                [shared.fileName]: mockfs.file({content: shared.data, mtime: new Date(assetMTime)}),
+            },
+        });
+
+        const library = new PhotosLibrary();
+        library.writeAssetsByName([primary.asset, shared.asset]);
+
+        expect(fs.readdirSync(primaryByNameDir)).toEqual([`IMG_0001.jpeg`]);
+        expect(fs.readdirSync(sharedByNameDir)).toEqual([`IMG_0002.jpeg`]);
+        expect(path.resolve(sharedByNameDir, fs.readlinkSync(path.join(sharedByNameDir, `IMG_0002.jpeg`))))
+            .toEqual(path.join(sharedAssetDir, shared.fileName));
     });
 });

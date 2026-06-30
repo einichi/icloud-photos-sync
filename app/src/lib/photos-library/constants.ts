@@ -7,6 +7,13 @@ export const ARCHIVE_DIR = `_Archive`;
 export const STASH_DIR = `.stash`;
 
 /**
+ * Optional folders mirroring the asset directories, where each asset is symlinked under its original (human-readable)
+ * filename instead of its checksum-encoded name. Only maintained when the `allPhotosByName` option is enabled.
+ */
+export const PRIMARY_ASSET_DIR_BY_NAME = `_All-Photos-by-name`;
+export const SHARED_ASSET_DIR_BY_NAME = `_Shared-Photos-by-name`;
+
+/**
  * The version of the local photos library
  */
 export const LIBRARY_VERSION = 1;

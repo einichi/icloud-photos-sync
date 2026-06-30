@@ -37,6 +37,16 @@ export class PhotosLibrary {
     stashDir: string;
 
     /**
+     * The full path to the optional folder mirroring the primary assets under their original filenames
+     */
+    primaryAssetByNameDir: string;
+
+    /**
+     * The full path to the optional folder mirroring the shared assets under their original filenames
+     */
+    sharedAssetByNameDir: string;
+
+    /**
      * Creates the local PhotoLibrary
      * @throws An iCPSError if the library version does not match
      */
@@ -50,6 +60,89 @@ export class PhotosLibrary {
         this.sharedAssetDir = this.getFullPathAndCreate([PHOTOS_LIBRARY.SHARED_ASSET_DIR]);
         this.archiveDir = this.getFullPathAndCreate([PHOTOS_LIBRARY.ARCHIVE_DIR]);
         this.stashDir = this.getFullPathAndCreate([PHOTOS_LIBRARY.ARCHIVE_DIR, PHOTOS_LIBRARY.STASH_DIR]);
+        // Only created on demand (when the option is enabled), to avoid leaving empty folders otherwise
+        this.primaryAssetByNameDir = path.join(Resources.manager().dataDir, PHOTOS_LIBRARY.PRIMARY_ASSET_DIR_BY_NAME);
+        this.sharedAssetByNameDir = path.join(Resources.manager().dataDir, PHOTOS_LIBRARY.SHARED_ASSET_DIR_BY_NAME);
+    }
+
+    /**
+     * (Re)builds the human-readable asset folders, symlinking every asset under its original filename to the
+     * checksum-named file in the matching asset directory. The folders are fully rebuilt each run so deletions and
+     * renames are reflected without bookkeeping. Names that would collide are made unique with a deterministic numeric
+     * suffix, ordered by checksum so the assignment is stable across runs.
+     * @param assets - All assets that should currently be present in the library
+     */
+    writeAssetsByName(assets: Asset[]) {
+        this.writeZoneAssetsByName(assets, Zones.Primary);
+        this.writeZoneAssetsByName(assets, Zones.Shared);
+    }
+
+    /**
+     * Rebuilds the by-name folder for a single zone.
+     * @param assets - All assets that should currently be present in the library
+     * @param zone - The zone to rebuild the by-name folder for
+     * @emits iCPSEventRuntimeWarning.LINK_ERROR - If linking of an asset fails
+     */
+    private writeZoneAssetsByName(assets: Asset[], zone: Zones) {
+        const byNameDir = zone === Zones.Primary ? this.primaryAssetByNameDir : this.sharedAssetByNameDir;
+        const assetDir = zone === Zones.Primary ? this.primaryAssetDir : this.sharedAssetDir;
+
+        fs.rmSync(byNameDir, {recursive: true, force: true});
+        fs.mkdirSync(byNameDir, {recursive: true});
+
+        // Sorting by checksum keeps the de-duplication suffix assignment stable from run to run
+        const zoneAssets = assets
+            .filter(asset => asset.zone === zone)
+            .sort((a, b) => (a.getUUID() < b.getUUID() ? -1 : a.getUUID() > b.getUUID() ? 1 : 0));
+
+        const usedNames = new Set<string>();
+        let linkedCount = 0;
+        for (const asset of zoneAssets) {
+            const assetPath = path.format({dir: assetDir, base: asset.getAssetFilename()});
+            // Skip assets whose file is not on disk (e.g. a failed download) to avoid creating dead symlinks
+            if (!fs.existsSync(assetPath)) {
+                continue;
+            }
+
+            const desiredName = asset.origFilename ? asset.getPrettyFilename() : asset.getAssetFilename();
+            const linkName = this.uniqueLinkName(desiredName, usedNames);
+            usedNames.add(linkName);
+
+            const linkPath = path.format({dir: byNameDir, base: linkName});
+            const relativeAssetPath = path.relative(byNameDir, assetPath);
+            try {
+                const assetTime = fs.statSync(assetPath).mtime;
+                fs.symlinkSync(relativeAssetPath, linkPath);
+                fs.lutimesSync(linkPath, assetTime, assetTime);
+                linkedCount++;
+            } catch (err) {
+                Resources.emit(iCPSEventRuntimeWarning.LINK_ERROR, err, assetPath, linkPath);
+            }
+        }
+
+        Resources.logger(this).info(`Linked ${linkedCount} asset(s) by name in ${byNameDir}`);
+    }
+
+    /**
+     * Produces a filename unique within the provided set, appending ' (n)' before the extension on collision.
+     * @param desiredName - The preferred human-readable filename
+     * @param usedNames - The names already taken in the target directory
+     * @returns A collision-free filename
+     */
+    private uniqueLinkName(desiredName: string, usedNames: Set<string>): string {
+        if (!usedNames.has(desiredName)) {
+            return desiredName;
+        }
+
+        const {name, ext} = path.parse(desiredName);
+        let counter = 2;
+        let candidate = path.format({name: `${name} (${counter})`, ext});
+        while (usedNames.has(candidate)) {
+            counter++;
+            candidate = path.format({name: `${name} (${counter})`, ext});
+        }
+
+        return candidate;
     }
 
     /**

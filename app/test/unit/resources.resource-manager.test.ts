@@ -839,6 +839,12 @@ describe(`ResourceManager`, () => {
             });
         });
 
+        describe(`allPhotosByName`, () => {
+            test(`should return the all-photos-by-name flag from the resources`, () => {
+                expect(resourceManager.allPhotosByName).toEqual(resources.allPhotosByName);
+            });
+        });
+
         describe(`logLevel`, () => {
             test(`should return the log level from the resources`, () => {
                 expect(resourceManager.logLevel).toEqual(resources.logLevel);
