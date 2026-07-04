@@ -837,26 +837,19 @@ export class iCloudPhotos {
         const filterBy = albumId === undefined
             ? [startRankFilter, directionFilter]
             : [startRankFilter, directionFilter, QueryBuilder.getParentFilterForParentId(albumId)];
-        const records: any[] = [];
-        let continuationMarker: string | undefined;
+        const page = await this.performQueryPage(
+            zone,
+            recordType,
+            filterBy,
+            MAX_RECORDS_LIMIT,
+            QueryBuilder.QUERY_KEYS,
+        );
 
-        do {
-            const page = await this.performQueryPage(
-                zone,
-                recordType,
-                filterBy,
-                MAX_RECORDS_LIMIT,
-                QueryBuilder.QUERY_KEYS,
-                continuationMarker,
-            );
-            records.push(...page.records);
-            continuationMarker = page.continuationMarker;
-            if (continuationMarker) {
-                Resources.logger(this).debug(`Following continuation marker for startRank-paged photo metadata query at index ${startRank}`);
-            }
-        } while (continuationMarker);
+        if (page.continuationMarker) {
+            Resources.logger(this).warn(`Ignoring continuation marker for bounded startRank-paged photo metadata query at index ${startRank}; missing paired records will be recovered by targeted lookup`);
+        }
 
-        return records;
+        return page.records;
     }
 
     /**

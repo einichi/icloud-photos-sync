@@ -516,20 +516,17 @@ describe.each([
             expect(photos.getPictureRecordsCountForZone).toHaveBeenCalledWith(zone, undefined);
         });
 
-        test(`Follows continuation marker for startRank-paged picture records`, async () => {
+        test(`Does not follow continuation marker for bounded startRank-paged picture records`, async () => {
             const performQueryPage = jest.fn<() => Promise<{records: string[], continuationMarker?: string}>>()
-                .mockResolvedValueOnce({
+                .mockResolvedValue({
                     records: [`recordA`],
                     continuationMarker: `next-page`,
-                })
-                .mockResolvedValueOnce({
-                    records: [`recordB`],
                 });
             (photos as any).performQueryPage = performQueryPage;
 
-            await expect(photos.fetchPictureRecordsPageForZone(zone, 0)).resolves.toEqual([`recordA`, `recordB`]);
+            await expect(photos.fetchPictureRecordsPageForZone(zone, 0)).resolves.toEqual([`recordA`]);
 
-            expect(performQueryPage).toHaveBeenCalledTimes(2);
+            expect(performQueryPage).toHaveBeenCalledTimes(1);
         });
     });
 });
