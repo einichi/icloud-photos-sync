@@ -846,7 +846,7 @@ export class iCloudPhotos {
         );
 
         if (page.continuationMarker) {
-            Resources.logger(this).warn(`Ignoring continuation marker for bounded startRank-paged photo metadata query at index ${startRank}; missing paired records will be recovered by targeted lookup`);
+            Resources.logger(this).debug(`Ignoring continuation marker for bounded startRank-paged photo metadata query at index ${startRank}; missing paired records will be recovered by targeted lookup`);
         }
 
         return page.records;
