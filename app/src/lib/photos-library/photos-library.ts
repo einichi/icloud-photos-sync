@@ -72,9 +72,9 @@ export class PhotosLibrary {
      * suffix, ordered by checksum so the assignment is stable across runs.
      * @param assets - All assets that should currently be present in the library
      */
-    writeAssetsByName(assets: Asset[]) {
-        this.writeZoneAssetsByName(assets, Zones.Primary);
-        this.writeZoneAssetsByName(assets, Zones.Shared);
+    async writeAssetsByName(assets: Asset[]): Promise<void> {
+        await this.writeZoneAssetsByName(assets, Zones.Primary);
+        await this.writeZoneAssetsByName(assets, Zones.Shared);
     }
 
     /**
@@ -83,12 +83,12 @@ export class PhotosLibrary {
      * @param zone - The zone to rebuild the by-name folder for
      * @emits iCPSEventRuntimeWarning.LINK_ERROR - If linking of an asset fails
      */
-    private writeZoneAssetsByName(assets: Asset[], zone: Zones) {
+    private async writeZoneAssetsByName(assets: Asset[], zone: Zones): Promise<void> {
         const byNameDir = zone === Zones.Primary ? this.primaryAssetByNameDir : this.sharedAssetByNameDir;
         const assetDir = zone === Zones.Primary ? this.primaryAssetDir : this.sharedAssetDir;
 
-        fs.rmSync(byNameDir, {recursive: true, force: true});
-        fs.mkdirSync(byNameDir, {recursive: true});
+        await this.emptyDirectory(byNameDir);
+        await fs.promises.mkdir(byNameDir, {recursive: true});
 
         // Sorting by checksum keeps the de-duplication suffix assignment stable from run to run
         const zoneAssets = assets
@@ -111,9 +111,9 @@ export class PhotosLibrary {
             const linkPath = path.format({dir: byNameDir, base: linkName});
             const relativeAssetPath = path.relative(byNameDir, assetPath);
             try {
-                const assetTime = fs.statSync(assetPath).mtime;
-                fs.symlinkSync(relativeAssetPath, linkPath);
-                fs.lutimesSync(linkPath, assetTime, assetTime);
+                const assetTime = (await fs.promises.stat(assetPath)).mtime;
+                await fs.promises.symlink(relativeAssetPath, linkPath);
+                await fs.promises.lutimes(linkPath, assetTime, assetTime);
                 linkedCount++;
             } catch (err) {
                 Resources.emit(iCPSEventRuntimeWarning.LINK_ERROR, err, assetPath, linkPath);
@@ -130,6 +130,7 @@ export class PhotosLibrary {
      * @returns A collision-free filename
      */
     private uniqueLinkName(desiredName: string, usedNames: Set<string>): string {
+        desiredName = this.sanitizeLinkBasename(desiredName);
         if (!usedNames.has(desiredName)) {
             return desiredName;
         }
@@ -143,6 +144,36 @@ export class PhotosLibrary {
         }
 
         return candidate;
+    }
+
+    /**
+     * Removes all current entries from a directory, or removes a non-directory path so a directory can be created there.
+     * @param dirPath - Directory to empty
+     */
+    private async emptyDirectory(dirPath: string): Promise<void> {
+        if (!fs.existsSync(dirPath)) {
+            return;
+        }
+
+        const dirStat = await fs.promises.lstat(dirPath);
+        if (!dirStat.isDirectory()) {
+            await fs.promises.rm(dirPath, {force: true});
+            return;
+        }
+
+        for (const entry of await fs.promises.readdir(dirPath)) {
+            await fs.promises.rm(path.join(dirPath, entry), {recursive: true, force: true});
+        }
+    }
+
+    /**
+     * Keeps generated symlink basenames inside the target folder.
+     * @param filename - Desired link filename
+     * @returns Safe link filename
+     */
+    private sanitizeLinkBasename(filename: string): string {
+        const sanitizedFilename = filename.replaceAll(/[/:\\]/g, `_`).trim();
+        return sanitizedFilename.length > 0 ? sanitizedFilename : `unnamed`;
     }
 
     /**
@@ -491,28 +522,36 @@ export class PhotosLibrary {
      * @emits iCPSEventRuntimeWarning.LINK_ERROR - If linking of an asset fails
      */
     linkAlbumAssets(album: Album, albumPath: string) {
-        Object.keys(album.assets).forEach(assetUUID => {
-            const linkedAsset = path.format({
-                dir: albumPath,
-                base: album.assets[assetUUID],
-            });
-            const assetPath = path.format({
-                dir: this.primaryAssetDir,
-                base: assetUUID,
-            });
-            // Relative asset path is relative to album, not the linkedAsset
-            const relativeAssetPath = path.relative(albumPath, assetPath);
-            try {
-                Resources.logger(this).debug(`Linking ${relativeAssetPath} to ${linkedAsset}`);
+        const usedNames = new Set<string>();
+        Object.keys(album.assets)
+            .sort((a, b) => {
+                const nameCompare = album.assets[a].localeCompare(album.assets[b]);
+                return nameCompare !== 0 ? nameCompare : a.localeCompare(b);
+            })
+            .forEach(assetUUID => {
+                const linkName = this.uniqueLinkName(album.assets[assetUUID], usedNames);
+                const linkedAsset = path.format({
+                    dir: albumPath,
+                    base: linkName,
+                });
+                const assetPath = path.format({
+                    dir: this.primaryAssetDir,
+                    base: assetUUID,
+                });
+                // Relative asset path is relative to album, not the linkedAsset
+                const relativeAssetPath = path.relative(albumPath, assetPath);
+                try {
+                    Resources.logger(this).debug(`Linking ${relativeAssetPath} to ${linkedAsset}`);
 
-                // Getting asset time, in order to update link as well
-                const assetTime = fs.statSync(assetPath).mtime;
-                fs.symlinkSync(relativeAssetPath, linkedAsset);
-                fs.lutimesSync(linkedAsset, assetTime, assetTime);
-            } catch (err) {
-                Resources.emit(iCPSEventRuntimeWarning.LINK_ERROR, err, assetPath, linkedAsset);
-            }
-        });
+                    // Getting asset time, in order to update link as well
+                    const assetTime = fs.statSync(assetPath).mtime;
+                    fs.symlinkSync(relativeAssetPath, linkedAsset);
+                    fs.lutimesSync(linkedAsset, assetTime, assetTime);
+                    usedNames.add(linkName);
+                } catch (err) {
+                    Resources.emit(iCPSEventRuntimeWarning.LINK_ERROR, err, assetPath, linkedAsset);
+                }
+            });
     }
 
     /**
@@ -605,21 +644,49 @@ export class PhotosLibrary {
                 .addMessage(destUUIDPath);
         }
 
-        Resources.logger(this).debug(`Moving ${srcUUIDPath} to ${destUUIDPath}`);
-        fs.renameSync(srcUUIDPath, destUUIDPath);
-        fs.utimesSync(destUUIDPath, srcUUIDStats.mtime, srcUUIDStats.mtime);
-
         let srcNameStats: fs.Stats = srcUUIDStats;
+        let srcNameExisted = false;
+        let movedUUID = false;
+        let unlinkedSrcName = false;
         try {
             srcNameStats = fs.lstatSync(srcNamePath);
-            fs.unlinkSync(srcNamePath);
+            srcNameExisted = true;
         } catch (err) {
-            Resources.logger(this).debug(`Unable to unlink ${srcNamePath}: ${err.message}`);
+            Resources.logger(this).debug(`Source link ${srcNamePath} does not exist: ${err.message}`);
         }
 
-        Resources.logger(this).debug(`Re-linking ${destNamePath}`);
-        fs.symlinkSync(path.basename(destUUIDPath), destNamePath);
-        fs.lutimesSync(destNamePath, srcNameStats.mtime, srcNameStats.mtime);
+        try {
+            Resources.logger(this).debug(`Moving ${srcUUIDPath} to ${destUUIDPath}`);
+            fs.renameSync(srcUUIDPath, destUUIDPath);
+            movedUUID = true;
+            fs.utimesSync(destUUIDPath, srcUUIDStats.mtime, srcUUIDStats.mtime);
+
+            if (srcNameExisted) {
+                fs.unlinkSync(srcNamePath);
+                unlinkedSrcName = true;
+            }
+
+            Resources.logger(this).debug(`Re-linking ${destNamePath}`);
+            fs.symlinkSync(path.basename(destUUIDPath), destNamePath);
+            fs.lutimesSync(destNamePath, srcNameStats.mtime, srcNameStats.mtime);
+        } catch (err) {
+            Resources.logger(this).warn(`Rolling back failed album move from ${srcUUIDPath} to ${destUUIDPath}: ${err.message}`);
+            if (fs.existsSync(destNamePath)) {
+                fs.unlinkSync(destNamePath);
+            }
+
+            if (movedUUID && fs.existsSync(destUUIDPath) && !fs.existsSync(srcUUIDPath)) {
+                fs.renameSync(destUUIDPath, srcUUIDPath);
+                fs.utimesSync(srcUUIDPath, srcUUIDStats.mtime, srcUUIDStats.mtime);
+            }
+
+            if (srcNameExisted && unlinkedSrcName && !fs.existsSync(srcNamePath)) {
+                fs.symlinkSync(path.basename(srcUUIDPath), srcNamePath);
+                fs.lutimesSync(srcNamePath, srcNameStats.mtime, srcNameStats.mtime);
+            }
+
+            throw err;
+        }
     }
 
     /**

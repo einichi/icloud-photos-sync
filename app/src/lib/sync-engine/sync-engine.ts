@@ -284,7 +284,7 @@ export class SyncEngine {
 
         if (Resources.manager().allPhotosByName) {
             // Rebuild the human-readable symlink folders from the assets that should now be on disk (kept + added)
-            this.photosLibrary.writeAssetsByName([...assetQueue[1], ...assetQueue[2]]);
+            await this.photosLibrary.writeAssetsByName([...assetQueue[1], ...assetQueue[2]]);
         }
 
         Resources.emit(iCPSEventSyncEngine.WRITE_ALBUMS, albumQueue[0].length, albumQueue[1].length, albumQueue[2].length);

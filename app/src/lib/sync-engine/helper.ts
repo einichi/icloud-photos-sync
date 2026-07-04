@@ -8,6 +8,8 @@ import {PEntity, PLibraryEntities, PLibraryProcessingQueues} from "../photos-lib
 import {Resources} from "../resources/main.js";
 import {iCPSEventRuntimeWarning} from "../resources/events-types.js";
 
+type AssetPathKey = string;
+
 /**
  * This object exposes various static helpers required to perform a sync
  */
@@ -45,7 +47,7 @@ export const SyncEngineHelper = {
  * @returns An array of all containing assets
  */
 function convertCPLAssets(cplAssets: CPLAsset[], cplMasters: CPLMaster[]): Asset[] {
-    const cplMasterRecords = {};
+    const cplMasterRecords: Record<string, CPLMaster> = {};
     cplMasters.forEach(masterRecord => {
         cplMasterRecords[masterRecord.recordName] = masterRecord;
     });
@@ -53,6 +55,13 @@ function convertCPLAssets(cplAssets: CPLAsset[], cplMasters: CPLMaster[]): Asset
     cplAssets.forEach(asset => {
         const master: CPLMaster = cplMasterRecords[asset.masterRef];
         try {
+            if (!master) {
+                throw new iCPSError(LIBRARY_ERR.MISSING_CPL_MASTER)
+                    .addMessage(asset.recordName)
+                    .addContext(`assetRecordName`, asset.recordName)
+                    .addContext(`masterRef`, asset.masterRef);
+            }
+
             const parsedOrigFilename = path.parse(Buffer.from(master.filenameEnc, `base64`).toString());
 
             const origFilename = parsedOrigFilename.name;
@@ -73,7 +82,46 @@ function convertCPLAssets(cplAssets: CPLAsset[], cplMasters: CPLMaster[]): Asset
             Resources.emit(iCPSEventRuntimeWarning.ICLOUD_LOAD_ERROR, err, asset, master);
         }
     });
-    return remoteAssets;
+    return deduplicateAssetsByTargetPath(remoteAssets);
+}
+
+/**
+ * Removes remote asset records that resolve to the same on-disk file.
+ * iCloud can return original/edited pairs with identical bytes but different modification timestamps; the filesystem can
+ * only hold one mtime for that target file, so keeping both causes redownload ping-pong. The newest record is used as the
+ * canonical representation, with asset type and record name as deterministic tie-breakers.
+ * @param assets - Converted remote assets
+ * @returns One asset per target file path
+ */
+function deduplicateAssetsByTargetPath(assets: Asset[]): Asset[] {
+    const dedupedAssets = new Map<AssetPathKey, Asset>();
+    for (const asset of assets) {
+        const targetPathKey = `${asset.zone}\0${asset.getAssetFilename()}`;
+        const existingAsset = dedupedAssets.get(targetPathKey);
+        if (!existingAsset || compareCanonicalAsset(asset, existingAsset) < 0) {
+            dedupedAssets.set(targetPathKey, asset);
+        }
+    }
+
+    return [...dedupedAssets.values()];
+}
+
+/**
+ * Orders candidate records for the same target file path.
+ * @param a - First asset
+ * @param b - Second asset
+ * @returns Negative if a should be preferred
+ */
+function compareCanonicalAsset(a: Asset, b: Asset): number {
+    if (a.modified !== b.modified) {
+        return b.modified - a.modified;
+    }
+
+    if (a.assetType !== b.assetType) {
+        return a.assetType - b.assetType;
+    }
+
+    return (a.recordName ?? ``).localeCompare(b.recordName ?? ``);
 }
 
 /**
@@ -87,7 +135,38 @@ function convertCPLAlbums(cplAlbums: CPLAlbum[]) : Album[] {
         remoteAlbums.push(Album.fromCPL(cplAlbum));
     }
 
+    applyUniqueSiblingAlbumNames(remoteAlbums);
     return remoteAlbums;
+}
+
+/**
+ * Makes sibling album filenames unique before diffing so duplicate iCloud names do not fail every write.
+ * @param albums - Remote albums to normalize
+ */
+function applyUniqueSiblingAlbumNames(albums: Album[]): void {
+    const siblingGroups = new Map<string, Album[]>();
+    for (const album of albums) {
+        const key = `${album.parentAlbumUUID}\0${album.getSanitizedFilename()}`;
+        const group = siblingGroups.get(key) ?? [];
+        group.push(album);
+        siblingGroups.set(key, group);
+    }
+
+    for (const group of siblingGroups.values()) {
+        if (group.length < 2) {
+            continue;
+        }
+
+        group
+            .sort((a, b) => a.getUUID().localeCompare(b.getUUID()))
+            .forEach((album, index) => {
+                if (index === 0) {
+                    return;
+                }
+
+                album.albumName = `${album.albumName} (${index + 1})`;
+            });
+    }
 }
 
 /**

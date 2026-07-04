@@ -97,6 +97,32 @@ export class EventManager {
     }
 
     /**
+     * Removes a single listener from the event bus and registry.
+     * @param source - The source that registered the listener
+     * @param event - The event the listener was registered for
+     * @param listener - The exact listener function
+     * @returns This instance for chaining
+     */
+    removeListener(source: any, event: iCPSEvent, listener: ListenerFunction): EventManager {
+        this._eventBus.removeListener(event, listener);
+        const sourceRegistry = this._eventRegistry.get(source);
+        if (!sourceRegistry) {
+            return this;
+        }
+
+        const updatedSourceRegistry = sourceRegistry.filter(registryObject => (
+            registryObject.event !== event || registryObject.listener !== listener
+        ));
+        if (updatedSourceRegistry.length === 0) {
+            this._eventRegistry.delete(source);
+            return this;
+        }
+
+        this._eventRegistry.set(source, updatedSourceRegistry);
+        return this;
+    }
+
+    /**
      * This functions registers the listener with the event registry
      * @param source - The source of the registration request
      * @param event - The event to listen to

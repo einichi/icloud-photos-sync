@@ -8,6 +8,7 @@ import {iCPSError} from "../error/error.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SMTP_TIMEOUT_MS = 30 * 1000;
+const MAX_SYNC_REPORT_LIST_ITEMS = 50;
 
 type EmailMessage = {
     subject: string,
@@ -250,8 +251,6 @@ export class EmailNotifier {
             })
             .on(iCPSEventRuntimeError.HANDLED_ERROR, (err: iCPSError) => {
                 this.addSyncReportError(err);
-                this.sendSyncReport(`failed`)
-                    .catch(sendErr => Resources.logger(this).error(`Failed to send sync result email: ${sendErr}`));
             });
     }
 
@@ -367,7 +366,12 @@ export class EmailNotifier {
             return `None`;
         }
 
-        return items.map(item => `- ${item}`).join(`\n`);
+        const listedItems = items.slice(0, MAX_SYNC_REPORT_LIST_ITEMS).map(item => `- ${item}`);
+        if (items.length > MAX_SYNC_REPORT_LIST_ITEMS) {
+            listedItems.push(`- ... ${items.length - MAX_SYNC_REPORT_LIST_ITEMS} more omitted`);
+        }
+
+        return listedItems.join(`\n`);
     }
 
     private formatDuration(durationMs: number): string {

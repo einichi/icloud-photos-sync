@@ -28,6 +28,19 @@ export enum AssetType {
      */
     LIVE = 2
 }
+
+const UNSAFE_FILENAME_CHARS = /[/:\\]/g;
+
+/**
+ * Sanitizes an iCloud-provided filename segment for use as a local path basename.
+ * @param name - Filename segment without extension
+ * @returns Filename segment safe to join below the library directory
+ */
+export function sanitizeAssetFilenameSegment(name: string): string {
+    const sanitizedName = name.replaceAll(UNSAFE_FILENAME_CHARS, `_`).trim();
+    return sanitizedName.length > 0 ? sanitizedName : `unnamed`;
+}
+
 /**
  * This class represents an Asset in the Photo Library
  */
@@ -213,8 +226,9 @@ export class Asset implements PEntity<Asset> {
      * @returns The human readable / pretty printed filename of this asset, based on the filename of the original file imported.
      */
     getPrettyFilename(): string {
+        const safeOrigFilename = sanitizeAssetFilenameSegment(this.origFilename ?? ``);
         return path.format({
-            name: this.origFilename + (this.assetType === AssetType.EDIT ? `-edited` : ``) + (this.assetType === AssetType.LIVE ? `-live` : ``),
+            name: safeOrigFilename + (this.assetType === AssetType.EDIT ? `-edited` : ``) + (this.assetType === AssetType.LIVE ? `-live` : ``),
             ext: this.fileType.getExtension(),
         });
     }

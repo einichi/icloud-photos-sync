@@ -1,7 +1,9 @@
 import fs from 'fs/promises';
 import {iCPSError} from '../../app/error/error.js';
+import {LIBRARY_ERR} from '../../app/error/error-codes.js';
 import {iCloud} from '../icloud/icloud.js';
 import {PhotosLibrary} from '../photos-library/photos-library.js';
+import {AssetChecksum} from '../photos-library/asset-checksum.js';
 import {Asset} from '../photos-library/model/asset.js';
 import {PLibraryProcessingQueues} from '../photos-library/model/photos-entity.js';
 import {AssetDownloadReason, iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-types.js';
@@ -201,8 +203,45 @@ export class AssetWriter {
             await asset.verify();
             Resources.logger(this.logSource).debug(`Asset ${this.getAssetProgressDisplayName(asset)} already exists locally and passed verification`);
             return true;
-        } catch (_err) {
+        } catch (err) {
+            if (await this.repairMetadataOnlyMismatch(asset, err)) {
+                return true;
+            }
+
             await this.deleteFailedAsset(asset);
+            return false;
+        }
+    }
+
+    /**
+     * Repairs a local file whose bytes match iCloud but whose mtime drifted.
+     * @param asset - The asset being checked
+     * @param err - Verification failure
+     * @returns True if the file was repaired and can be kept
+     */
+    private async repairMetadataOnlyMismatch(asset: Asset, err: unknown): Promise<boolean> {
+        const syncError = iCPSError.toiCPSError(err);
+        if (syncError.code !== LIBRARY_ERR.ASSET_MODIFICATION_TIME.code) {
+            return false;
+        }
+
+        const assetPath = asset.getAssetFilePath();
+        try {
+            const fileStat = await fs.stat(assetPath);
+            if (fileStat.size !== asset.size) {
+                return false;
+            }
+
+            const localChecksum = await AssetChecksum.forFile(assetPath);
+            if (localChecksum !== asset.fileChecksum) {
+                return false;
+            }
+
+            await fs.utimes(assetPath, new Date(asset.modified), new Date(asset.modified));
+            Resources.logger(this.logSource).info(`Repaired modification time for ${this.getAssetProgressDisplayName(asset)} without redownloading`);
+            return true;
+        } catch (repairErr) {
+            Resources.logger(this.logSource).warn(`Unable to repair modification time for ${this.getAssetProgressDisplayName(asset)}: ${iCPSError.toiCPSError(repairErr).getDescription()}`);
             return false;
         }
     }

@@ -174,6 +174,10 @@ export namespace Resources {
                 Resources.event().once(listenerObject, event, listener);
                 return Resources.events(listenerObject); // Returning for chaining
             },
+            removeListener(event: iCPSEvent, listener: ListenerFunction) {
+                Resources.event().removeListener(listenerObject, event, listener);
+                return Resources.events(listenerObject); // Returning for chaining
+            },
             removeListeners(event?: iCPSEvent) {
                 Resources.event().removeListenersFromRegistry(listenerObject, event);
                 return Resources.events(listenerObject); // Returning for chaining
@@ -301,6 +305,13 @@ export namespace Resources {
             * @returns This instance for chaining
             */
            once: (event: iCPSEvent, listener: ListenerFunction) => Resources.Types.Events,
+           /**
+            * Removes a specific listener from the event bus
+            * @param event - The event the listener was registered for
+            * @param listener - The listener function to remove
+            * @returns This instance for chaining
+            */
+           removeListener: (event: iCPSEvent, listener: ListenerFunction) => Resources.Types.Events,
            /**
             * Removes all listeners from the source from the event bus
             * @param event - Optional event to remove listeners for - otherwise all will be removed

@@ -656,7 +656,7 @@ describe(`App control flow`, () => {
             }
         });
 
-        test(`Scheduled sync requires MFA`, async () => {
+        test(`Scheduled sync emits done for empty remote state`, async () => {
             const daemonApp = await appFactory(validOptions.daemon) as DaemonApp;
             const successEvent = spyOnEvent(Resources._instances.event._eventBus, iCPSEventApp.SCHEDULED_DONE);
 
@@ -667,7 +667,7 @@ describe(`App control flow`, () => {
             await daemonApp.performScheduledSync(syncApp);
 
             expect(syncApp.run).toHaveBeenCalled();
-            expect(successEvent).not.toHaveBeenCalled();
+            expect(successEvent).toHaveBeenCalled();
         });
 
         test(`Scheduled sync fails`, async () => {

@@ -98,9 +98,22 @@ export class iCloudPhotos {
      */
     getReady(): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            Resources.events(this)
-                .once(iCPSEventPhotos.READY, () => resolve())
-                .once(iCPSEventPhotos.ERROR, err => reject(err));
+            const events = Resources.events(this);
+            const cleanup = () => {
+                events.removeListener(iCPSEventPhotos.READY, onReady);
+                events.removeListener(iCPSEventPhotos.ERROR, onError);
+            };
+            const onReady = () => {
+                cleanup();
+                resolve();
+            };
+            const onError = (err: unknown) => {
+                cleanup();
+                reject(err);
+            };
+            events
+                .once(iCPSEventPhotos.READY, onReady)
+                .once(iCPSEventPhotos.ERROR, onError);
         });
     }
 
@@ -545,10 +558,24 @@ export class iCloudPhotos {
      * @returns A promise that resolves on the next READY event, or rejects on ERROR or timeout
      */
     private acquireFreshSession(): Promise<void> {
+        const events = Resources.events(this);
+        let cleanup = () => undefined;
         const sessionReady = new Promise<void>((resolve, reject) => {
-            Resources.events(this)
-                .once(iCPSEventPhotos.READY, () => resolve())
-                .once(iCPSEventPhotos.ERROR, err => reject(err));
+            const onReady = () => {
+                cleanup();
+                resolve();
+            };
+            const onError = (err: unknown) => {
+                cleanup();
+                reject(err);
+            };
+            cleanup = () => {
+                events.removeListener(iCPSEventPhotos.READY, onReady);
+                events.removeListener(iCPSEventPhotos.ERROR, onError);
+            };
+            events
+                .once(iCPSEventPhotos.READY, onReady)
+                .once(iCPSEventPhotos.ERROR, onError);
         });
 
         Resources.emit(iCPSEventCloud.SESSION_EXPIRED);
@@ -557,7 +584,7 @@ export class iCloudPhotos {
             milliseconds: Resources.manager().mfaTimeout * 1000 + SESSION_RECOVERY_GRACE_MS,
             message: new iCPSError(ICLOUD_PHOTOS_ERR.DOWNLOAD_URL_REFRESH)
                 .addMessage(`timed out re-acquiring expired session`),
-        });
+        }).finally(cleanup);
     }
 
     /**
@@ -725,7 +752,19 @@ export class iCloudPhotos {
                     cplAlbums.push(CPLAlbum.parseFromQuery(album));
                 }
             } catch (err) {
-                Resources.logger(this).info(`Error processing CPLAlbum: ${jsonc.stringify(album)}: ${err.message}`);
+                const albumError = iCPSError.toiCPSError(err);
+                if ([
+                    ICLOUD_PHOTOS_ERR.DELETED_RECORD.code,
+                    ICLOUD_PHOTOS_ERR.UNWANTED_ALBUM.code,
+                    ICLOUD_PHOTOS_ERR.UNKNOWN_ALBUM.code,
+                ].includes(albumError.code)) {
+                    Resources.logger(this).info(`Ignoring CPLAlbum: ${jsonc.stringify(album)}: ${albumError.getDescription()}`);
+                    continue;
+                }
+
+                throw new iCPSError(ICLOUD_PHOTOS_ERR.FOLDER_STRUCTURE)
+                    .addMessage(album?.recordName ?? `unknown album`)
+                    .addCause(err);
             }
         }
 
@@ -792,32 +831,32 @@ export class iCloudPhotos {
         Resources.logger(this).debug(`Fetching query for records of album ${albumId === undefined ? `All photos` : albumId} in ${zone} library at index ${startRank}`);
         const startRankFilter = QueryBuilder.getStartRankFilterForStartRank(startRank);
         const directionFilter = QueryBuilder.getDirectionFilterForDirection();
-        let page: PhotosQueryPage;
+        const recordType = albumId === undefined
+            ? QueryBuilder.RECORD_TYPES.ALL_PHOTOS
+            : QueryBuilder.RECORD_TYPES.PHOTO_RECORDS;
+        const filterBy = albumId === undefined
+            ? [startRankFilter, directionFilter]
+            : [startRankFilter, directionFilter, QueryBuilder.getParentFilterForParentId(albumId)];
+        const records: any[] = [];
+        let continuationMarker: string | undefined;
 
-        if (albumId === undefined) {
-            page = await this.performQueryPage(
+        do {
+            const page = await this.performQueryPage(
                 zone,
-                QueryBuilder.RECORD_TYPES.ALL_PHOTOS,
-                [startRankFilter, directionFilter],
+                recordType,
+                filterBy,
                 MAX_RECORDS_LIMIT,
                 QueryBuilder.QUERY_KEYS,
+                continuationMarker,
             );
-        } else {
-            const parentFilter = QueryBuilder.getParentFilterForParentId(albumId);
-            page = await this.performQueryPage(
-                zone,
-                QueryBuilder.RECORD_TYPES.PHOTO_RECORDS,
-                [startRankFilter, directionFilter, parentFilter],
-                MAX_RECORDS_LIMIT,
-                QueryBuilder.QUERY_KEYS,
-            );
-        }
+            records.push(...page.records);
+            continuationMarker = page.continuationMarker;
+            if (continuationMarker) {
+                Resources.logger(this).debug(`Following continuation marker for startRank-paged photo metadata query at index ${startRank}`);
+            }
+        } while (continuationMarker);
 
-        if (page.continuationMarker) {
-            Resources.logger(this).debug(`Ignoring continuation marker for startRank-paged photo metadata query at index ${startRank}`);
-        }
-
-        return page.records;
+        return records;
     }
 
     /**
@@ -944,6 +983,8 @@ export class iCloudPhotos {
             }
         }
 
+        await this.fetchMissingCPLMasters(cplAssets, cplMasters, parentId);
+
         // Pretty printing ignored assets
         if (ignoredAssets.length > 0) {
             Resources.logger(this).info(`Ignoring ${ignoredAssets.length} assets for ${parentId === undefined ? `All photos` : parentId}:`);
@@ -967,6 +1008,45 @@ export class iCloudPhotos {
 
         Resources.logger(this).info(`Parsed ${cplAssets.length} CPLAsset and ${cplMasters.length} CPLMaster records for album ${parentId === undefined ? `All photos` : parentId} in ${Date.now() - startedAt}ms`);
         return [cplAssets, cplMasters];
+    }
+
+    /**
+     * Looks up CPLMaster records missing from the paged metadata response.
+     * @param cplAssets - Parsed CPLAsset records
+     * @param cplMasters - Parsed CPLMaster records to append to
+     * @param parentId - Current album id, if any
+     */
+    private async fetchMissingCPLMasters(cplAssets: CPLAsset[], cplMasters: CPLMaster[], parentId?: string): Promise<void> {
+        const knownMasterNames = new Set(cplMasters.map(master => master.recordName));
+        const missingMasterNamesByZone = new Map<QueryBuilder.Zones, Set<string>>();
+        for (const asset of cplAssets) {
+            if (knownMasterNames.has(asset.masterRef)) {
+                continue;
+            }
+
+            const zone = asset.zoneName === `PrimarySync` ? QueryBuilder.Zones.Primary : QueryBuilder.Zones.Shared;
+            const missingMasterNames = missingMasterNamesByZone.get(zone) ?? new Set<string>();
+            missingMasterNames.add(asset.masterRef);
+            missingMasterNamesByZone.set(zone, missingMasterNames);
+        }
+
+        for (const [zone, missingMasterNames] of missingMasterNamesByZone) {
+            Resources.logger(this).warn(`Looking up ${missingMasterNames.size} missing CPLMaster record(s) for album ${parentId === undefined ? `All photos` : parentId} in ${zone} library`);
+            const missingMasterRecords = await this.performLookupWithRetry(zone, [...missingMasterNames], QueryBuilder.QUERY_KEYS);
+            for (const record of missingMasterRecords) {
+                this.filterPictureRecord(record, knownMasterNames);
+                if (record.recordType !== QueryBuilder.RECORD_TYPES.PHOTO_MASTER_RECORD) {
+                    throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
+                        .addMessage(`expected CPLMaster for missing master lookup, got ${record.recordType}`);
+                }
+
+                const master = CPLMaster.parseFromQuery(record);
+                if (!knownMasterNames.has(master.recordName)) {
+                    cplMasters.push(master);
+                    knownMasterNames.add(master.recordName);
+                }
+            }
+        }
     }
 
     /**

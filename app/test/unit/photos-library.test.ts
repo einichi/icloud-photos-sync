@@ -1364,8 +1364,6 @@ describe(`Write state`, () => {
                 folder.assets = albumAssets;
                 const library = new PhotosLibrary();
 
-                const linkErrorEvent = mockedEventManager.spyOnEvent(iCPSEventRuntimeWarning.LINK_ERROR);
-
                 library.writeAlbum(folder);
 
                 const uuidFolder = fs.statSync(path.join(Config.defaultConfig.dataDir, `.${albumUUID}`));
@@ -1382,7 +1380,12 @@ describe(`Write state`, () => {
                 const albumAsset1Target = fs.readlinkSync(albumAsset1Path);
                 expect(albumAsset1Target).toEqual(path.join(`..`, PRIMARY_ASSET_DIR, albumAsset1Filename));
 
-                expect(linkErrorEvent).toHaveBeenCalledTimes(1);
+                const albumAsset2Path = path.join(Config.defaultConfig.dataDir, `.${albumUUID}`, `2h-media-MOCpD78SHW0-unsplash (2).jpeg`);
+                const albumAsset2Stat = fs.lstatSync(albumAsset2Path);
+                expect(albumAsset2Stat.isSymbolicLink()).toBeTruthy();
+                expect(albumAsset2Stat.mtime).toEqual(new Date(albumAsset2mTime));
+                const albumAsset2Target = fs.readlinkSync(albumAsset2Path);
+                expect(albumAsset2Target).toEqual(path.join(`..`, PRIMARY_ASSET_DIR, albumAsset2Filename));
             });
         });
 
@@ -1920,7 +1923,7 @@ describe(`Write assets by name`, () => {
         return {asset, checksum, data, fileName: `${checksumToFileName(checksum)}.${ext}`};
     };
 
-    test(`Creates symlinks named by original filename, de-duplicating deterministically`, () => {
+    test(`Creates symlinks named by original filename, de-duplicating deterministically`, async () => {
         // Two distinct assets sharing the original filename, plus an edited variant and a missing-file asset
         const a = buildAsset(1, `IMG_0001`, AssetType.ORIG);
         const b = buildAsset(2, `IMG_0001`, AssetType.ORIG);
@@ -1937,7 +1940,7 @@ describe(`Write assets by name`, () => {
         });
 
         const library = new PhotosLibrary();
-        library.writeAssetsByName([a.asset, b.asset, edited.asset, missing.asset]);
+        await library.writeAssetsByName([a.asset, b.asset, edited.asset, missing.asset]);
 
         // The collision tiebreak is the checksum, so the lower checksum keeps the bare name
         const [first, second] = [a, b].sort((x, y) => (x.checksum < y.checksum ? -1 : 1));
@@ -1955,7 +1958,7 @@ describe(`Write assets by name`, () => {
         expect(fs.readdirSync(primaryByNameDir).sort()).toEqual([`IMG_0001 (2).jpeg`, `IMG_0001.jpeg`, `IMG_0002-edited.jpeg`]);
     });
 
-    test(`Rebuilds the folder each run, removing stale links`, () => {
+    test(`Rebuilds the folder each run, removing stale links`, async () => {
         const a = buildAsset(1, `IMG_0001`, AssetType.ORIG);
         const b = buildAsset(2, `IMG_0002`, AssetType.ORIG);
 
@@ -1967,15 +1970,15 @@ describe(`Write assets by name`, () => {
         });
 
         const library = new PhotosLibrary();
-        library.writeAssetsByName([a.asset, b.asset]);
+        await library.writeAssetsByName([a.asset, b.asset]);
         expect(fs.readdirSync(primaryByNameDir).sort()).toEqual([`IMG_0001.jpeg`, `IMG_0002.jpeg`]);
 
         // Second asset no longer present in the library -> its link must be pruned
-        library.writeAssetsByName([a.asset]);
+        await library.writeAssetsByName([a.asset]);
         expect(fs.readdirSync(primaryByNameDir)).toEqual([`IMG_0001.jpeg`]);
     });
 
-    test(`Routes assets into the matching zone folder`, () => {
+    test(`Routes assets into the matching zone folder`, async () => {
         const primary = buildAsset(1, `IMG_0001`, AssetType.ORIG, Zones.Primary);
         const shared = buildAsset(2, `IMG_0002`, AssetType.ORIG, Zones.Shared);
 
@@ -1989,7 +1992,7 @@ describe(`Write assets by name`, () => {
         });
 
         const library = new PhotosLibrary();
-        library.writeAssetsByName([primary.asset, shared.asset]);
+        await library.writeAssetsByName([primary.asset, shared.asset]);
 
         expect(fs.readdirSync(primaryByNameDir)).toEqual([`IMG_0001.jpeg`]);
         expect(fs.readdirSync(sharedByNameDir)).toEqual([`IMG_0002.jpeg`]);

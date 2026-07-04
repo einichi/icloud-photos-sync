@@ -5,6 +5,8 @@ import {CPLAlbum} from "../../icloud/icloud-photos/query-parser.js";
 import {STASH_DIR} from "../constants.js";
 import {PEntity} from "./photos-entity.js";
 
+const UNSAFE_ALBUM_FILENAME_CHARS = /[/:\\]/g;
+
 /**
  * Potential AlbumTypes
  */
@@ -75,7 +77,8 @@ export class Album implements PEntity<Album> {
      * @returns A valid filename, that will be used to store the album on disk
      */
     getSanitizedFilename(): string {
-        return this.albumName.replaceAll(`/`, `_`);
+        const sanitizedName = this.albumName.replaceAll(UNSAFE_ALBUM_FILENAME_CHARS, `_`).trim();
+        return sanitizedName.length > 0 ? sanitizedName : `unnamed`;
     }
 
     /**

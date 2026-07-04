@@ -81,6 +81,56 @@ describe(`Processing remote records`, () => {
         expect(warnEvent).toHaveBeenCalled();
     });
 
+    test(`Converting Assets deduplicates records targeting the same file`, () => {
+        const checksum = `ARN5w7b2LvDDhsZ8DnbU3RuZeShX`;
+        const resource = {
+            fileChecksum: checksum,
+            referenceChecksum: `AS/OBaLJzK8dRs8QM97ikJQfJEGI`,
+            size: 170384,
+            wrappingKey: `NQtpvztdVKKNfrb8lf482g==`,
+            downloadURL: `https://icloud.com`,
+        };
+        const cplMasters = [{
+            filenameEnc: Buffer.from(`IMG_0001.jpeg`).toString(`base64`),
+            modified: 1000,
+            recordName: `master-record`,
+            resourceType: `public.jpeg`,
+            resource,
+            zoneName: `PrimarySync`,
+        } as CPLMaster];
+        const cplAssets = [{
+            favorite: 0,
+            masterRef: `master-record`,
+            modified: 2000,
+            recordName: `asset-record`,
+            resourceType: `public.jpeg`,
+            resource,
+            adjustmentType: `com.apple.photo`,
+            zoneName: `PrimarySync`,
+        } as CPLAsset];
+
+        const assets = SyncEngineHelper.convertCPLAssets(cplAssets, cplMasters);
+
+        expect(assets).toHaveLength(1);
+        expect(assets[0].modified).toBe(2000);
+        expect(assets[0].assetType).toBe(AssetType.EDIT);
+    });
+
+    test(`Converting Asset warns when a CPLMaster is missing`, () => {
+        const mockedEventManager = prepareResources()!.event;
+        const warnEvent = mockedEventManager.spyOnEvent(iCPSEventRuntimeWarning.ICLOUD_LOAD_ERROR);
+        const cplAssets = [{
+            favorite: 0,
+            masterRef: `missing-master`,
+            modified: 2000,
+            recordName: `asset-record`,
+            zoneName: `PrimarySync`,
+        } as CPLAsset];
+
+        expect(SyncEngineHelper.convertCPLAssets(cplAssets, [])).toEqual([]);
+        expect(warnEvent).toHaveBeenCalledTimes(1);
+    });
+
     test(`Converting Albums - E2E Flow`, () => {
         const cplAlbums = expectedAlbumsAll as CPLAlbum[];
 
@@ -91,6 +141,17 @@ describe(`Processing remote records`, () => {
             expect(album.uuid.length).toBeGreaterThan(0);
             expect(album.albumType).toBeDefined();
         }
+    });
+
+    test(`Converting Albums makes duplicate sibling names deterministic`, () => {
+        const albumNameEnc = Buffer.from(`WhatsApp`).toString(`base64`);
+        const albums = SyncEngineHelper.convertCPLAlbums([
+            {recordName: `b-record`, albumNameEnc, parentId: ``, albumType: AlbumType.ALBUM} as CPLAlbum,
+            {recordName: `a-record`, albumNameEnc, parentId: ``, albumType: AlbumType.ALBUM} as CPLAlbum,
+        ]);
+
+        expect(albums.find(album => album.getUUID() === `a-record`)?.albumName).toBe(`WhatsApp`);
+        expect(albums.find(album => album.getUUID() === `b-record`)?.albumName).toBe(`WhatsApp (2)`);
     });
 });
 

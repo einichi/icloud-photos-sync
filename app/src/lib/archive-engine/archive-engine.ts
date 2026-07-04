@@ -117,10 +117,15 @@ export class ArchiveEngine {
     async persistAsset(assetPath: string, archivedAssetPath: string): Promise<void> {
         Resources.logger(this).debug(`Persisting ${assetPath} to ${archivedAssetPath}`);
         const fileStat = await fs.stat(assetPath);
-        // Const lFileStat = await fs.lstat(archivedAssetPath)
-        await fs.unlink(archivedAssetPath);
-        await fs.copyFile(assetPath, archivedAssetPath);
-        await fs.utimes(archivedAssetPath, fileStat.mtime, fileStat.mtime);
+        const tempArchivedAssetPath = `${archivedAssetPath}.tmp-${process.pid}-${Date.now()}`;
+        try {
+            await fs.copyFile(assetPath, tempArchivedAssetPath);
+            await fs.utimes(tempArchivedAssetPath, fileStat.mtime, fileStat.mtime);
+            await fs.rename(tempArchivedAssetPath, archivedAssetPath);
+        } catch (err) {
+            await fs.rm(tempArchivedAssetPath, {force: true});
+            throw err;
+        }
     }
 
     /**

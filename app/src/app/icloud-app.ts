@@ -31,6 +31,11 @@ export class DaemonApp extends iCPSApp {
     job: Cron;
 
     /**
+     * Guards manual and scheduled sync paths that share one daemon process.
+     */
+    private syncInProgress = false;
+
+    /**
      * Schedule the synchronization based on the provided cron string
      * @returns Once the job has been scheduled
      */
@@ -57,16 +62,22 @@ export class DaemonApp extends iCPSApp {
      * @param syncApp - Parametrized for testability - will be freshly initiated if omitted
      */
     async performScheduledSync(syncApp: SyncApp = new SyncApp({verifyKeptAssetChecksums: this.shouldVerifyScheduledChecksums()})) {
+        if (this.syncInProgress) {
+            Resources.emit(iCPSEventApp.SCHEDULED_OVERRUN, this.job?.nextRun());
+            return;
+        }
+
+        this.syncInProgress = true;
         try {
             Resources.emit(iCPSEventApp.SCHEDULED_START);
-            const [remoteAssets] = await syncApp.run() as [Asset[], Album[]];
+            await syncApp.run() as [Asset[], Album[]];
 
-            if (remoteAssets.length > 0) {
-                Resources.emit(iCPSEventApp.SCHEDULED_DONE, this.job?.nextRun());
-            }
+            Resources.emit(iCPSEventApp.SCHEDULED_DONE, this.job?.nextRun());
         } catch (err) {
             Resources.emit(iCPSEventRuntimeError.SCHEDULED_ERROR, new iCPSError(APP_ERR.DAEMON).addCause(err));
             Resources.emit(iCPSEventApp.SCHEDULED_RETRY, this.job?.nextRun());
+        } finally {
+            this.syncInProgress = false;
         }
     }
 

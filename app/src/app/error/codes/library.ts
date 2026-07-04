@@ -19,6 +19,10 @@ export const UNKNOWN_SYMLINK_ERROR: ErrorStruct = buildErrorStruct(
     name, prefix, `UNKNOWN_SYMLINK_ERROR`, `Unknown error while processing symlink`,
 );
 
+export const MISSING_CPL_MASTER: ErrorStruct = buildErrorStruct(
+    name, prefix, `MISSING_CPL_MASTER`, `Unable to find CPLMaster for remote asset`,
+);
+
 export const NO_PARENT: ErrorStruct = buildErrorStruct(
     name, prefix, `NO_PARENT`, `Unable to find parent of album`,
 );

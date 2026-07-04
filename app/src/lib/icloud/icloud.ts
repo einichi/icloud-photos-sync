@@ -76,17 +76,36 @@ export class iCloud {
      * @returns A promise that will resolve to true, if the connection was established successfully, false in case the MFA code was not provided in time or reject, in case there is an error
      */
     getReady(): Promise<boolean> {
-        return pTimeout(
-            new Promise<boolean>((resolve, reject) => {
-                Resources.events(this)
-                    .once(iCPSEventPhotos.READY, () => resolve(true))
-                    .once(iCPSEventMFA.MFA_NOT_PROVIDED, () => resolve(false))
-                    .once(iCPSEventCloud.ERROR, err => reject(err));
-            }), {
-                milliseconds: Resources.manager().mfaTimeout  + (1000 * 60 * 5), // 5 minutes on top of mfa timeout should be sufficient
-                message: new iCPSError(AUTH_ERR.SETUP_TIMEOUT),
-            },
-        );
+        const events = Resources.events(this);
+        let cleanup = () => undefined;
+        const ready = new Promise<boolean>((resolve, reject) => {
+            const onReady = () => {
+                cleanup();
+                resolve(true);
+            };
+            const onMfaNotProvided = () => {
+                cleanup();
+                resolve(false);
+            };
+            const onError = (err: unknown) => {
+                cleanup();
+                reject(err);
+            };
+            cleanup = () => {
+                events.removeListener(iCPSEventPhotos.READY, onReady);
+                events.removeListener(iCPSEventMFA.MFA_NOT_PROVIDED, onMfaNotProvided);
+                events.removeListener(iCPSEventCloud.ERROR, onError);
+            };
+            events
+                .once(iCPSEventPhotos.READY, onReady)
+                .once(iCPSEventMFA.MFA_NOT_PROVIDED, onMfaNotProvided)
+                .once(iCPSEventCloud.ERROR, onError);
+        });
+
+        return pTimeout(ready, {
+            milliseconds: Resources.manager().mfaTimeout * 1000 + (1000 * 60 * 5), // 5 minutes on top of mfa timeout should be sufficient
+            message: new iCPSError(AUTH_ERR.SETUP_TIMEOUT),
+        }).finally(cleanup);
     }
 
     /**
@@ -154,7 +173,8 @@ export class iCloud {
             // Does not seem to work
             // if (err instanceof AxiosError) {
             if ((err as AxiosError).isAxiosError) {
-                switch (err.response.status) {
+                const status = (err as AxiosError).response?.status;
+                switch (status) {
                 case 401:
                     Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.UNAUTHORIZED).addCause(err));
                     break;
@@ -388,7 +408,8 @@ export class iCloud {
             Resources.logger(this).debug(`Account ready`);
             Resources.emit(iCPSEventCloud.ACCOUNT_READY);
         } catch (err) {
-            if ((err as any).isAxiosError && err.response.status === 421) {
+            const axiosError = err as AxiosError;
+            if (axiosError.isAxiosError && axiosError.response?.status === 421) {
                 Resources.logger(this).debug(`Session token expired, re-acquiring...`);
                 Resources.emit(iCPSEventCloud.SESSION_EXPIRED);
                 return;
