@@ -981,7 +981,11 @@ export class iCloudPhotos {
         // Pretty printing ignored assets
         if (ignoredAssets.length > 0) {
             Resources.logger(this).info(`Ignoring ${ignoredAssets.length} assets for ${parentId === undefined ? `All photos` : parentId}:`);
-            const erroredAssets = ignoredAssets.filter(err => err.code !== ICLOUD_PHOTOS_ERR.UNWANTED_RECORD_TYPE.code); // Filtering 'expected' errors
+            const expectedIgnoredCodes = new Set([
+                ICLOUD_PHOTOS_ERR.UNWANTED_RECORD_TYPE.code,
+                ICLOUD_PHOTOS_ERR.DUPLICATE_RECORD.code,
+            ]);
+            const erroredAssets = ignoredAssets.filter(err => !expectedIgnoredCodes.has(err.code)); // Filtering 'expected' errors
             if (erroredAssets.length > 0) {
                 Resources.logger(this).warn(`${erroredAssets.length} unexpected errors for ${parentId === undefined ? `All photos` : parentId}: ${erroredAssets.map(err => err.code).join(`, `)}`);
             }

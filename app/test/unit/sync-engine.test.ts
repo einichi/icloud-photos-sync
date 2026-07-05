@@ -13,7 +13,7 @@ import {SyncEngine} from '../../src/lib/sync-engine/sync-engine';
 import {iCloud} from '../../src/lib/icloud/icloud';
 import {PhotosLibrary} from '../../src/lib/photos-library/photos-library';
 import {iCPSError} from '../../src/app/error/error';
-import {ICLOUD_PHOTOS_ERR, SYNC_ERR} from '../../src/app/error/error-codes';
+import {ICLOUD_PHOTOS_ERR, RESOURCES_ERR, SYNC_ERR} from '../../src/app/error/error-codes';
 
 let mockedResourceManager: MockedResourceManager;
 let mockedEventManager: MockedEventManager;
@@ -617,6 +617,31 @@ describe(`Handle processing queue`, () => {
 
             expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledTimes(1);
             expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledWith(asset3);
+        });
+
+        test(`Retries transient asset download timeout before reporting an error`, async () => {
+            const asset = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.ORIG, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
+            asset.verify = jest.fn<typeof asset.verify>()
+                .mockResolvedValue(true);
+            const downloadTimeout = new iCPSError(RESOURCES_ERR.DOWNLOAD_TIMEOUT)
+                .addMessage(`timed out`);
+            syncEngine.icloud.photos.downloadAsset = jest.fn<typeof syncEngine.icloud.photos.downloadAsset>()
+                .mockRejectedValueOnce(downloadTimeout)
+                .mockResolvedValueOnce();
+
+            await syncEngine.writeAssets([[], [asset], []]);
+
+            expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledTimes(2);
+            expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(1, asset);
+            expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(2, asset);
+            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledTimes(1);
+            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledWith(asset);
+            expect(writeAssetStartedEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetCompleteEvent).toHaveBeenCalledWith(`test1.png`);
+            expect(writeAssetDownloadedEvent).toHaveBeenCalledTimes(1);
+            expect(writeAssetDownloadedEvent).toHaveBeenCalledWith(`test1.png`, `new`);
+            expect(writeAssetErrorEvent).not.toHaveBeenCalled();
         });
 
         test(`Adding & deleting`, async () => {

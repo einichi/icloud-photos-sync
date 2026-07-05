@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import {iCPSError} from '../../app/error/error.js';
-import {LIBRARY_ERR} from '../../app/error/error-codes.js';
+import {LIBRARY_ERR, RESOURCES_ERR} from '../../app/error/error-codes.js';
 import {iCloud} from '../icloud/icloud.js';
 import {PhotosLibrary} from '../photos-library/photos-library.js';
 import {AssetChecksum} from '../photos-library/asset-checksum.js';
@@ -9,13 +9,17 @@ import {PLibraryProcessingQueues} from '../photos-library/model/photos-entity.js
 import {AssetDownloadReason, iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-types.js';
 import {Resources} from '../resources/main.js';
 import type {SyncOptions} from './sync-engine.js';
+import {SyncRetryPolicy} from './retry-policy.js';
 
 const ASSET_PROGRESS_LOG_PERCENT_INTERVAL = 10;
+const ASSET_WRITE_ATTEMPTS = 3;
 
 /**
  * Writes asset changes to disk by deleting stale local assets and downloading missing remote assets.
  */
 export class AssetWriter {
+    private readonly retryPolicy = new SyncRetryPolicy();
+
     constructor(
         private readonly icloud: iCloud,
         private readonly photosLibrary: PhotosLibrary,
@@ -115,19 +119,55 @@ export class AssetWriter {
                 Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, assetProgressDisplayName);
                 return;
             }
-
-            Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_STARTED, assetProgressDisplayName);
-            await this.icloud.photos.downloadAsset(asset);
-            await asset.verify();
         } catch (err) {
             await this.deleteFailedAsset(asset);
             Resources.emit(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, err, asset);
             return;
         }
 
+        Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_STARTED, assetProgressDisplayName);
+        for (let attempt = 1; attempt <= ASSET_WRITE_ATTEMPTS; attempt++) {
+            try {
+                await this.icloud.photos.downloadAsset(asset);
+                await asset.verify();
+                break;
+            } catch (err) {
+                await this.deleteFailedAsset(asset);
+                if (attempt < ASSET_WRITE_ATTEMPTS && this.isRetryableAssetWriteError(err)) {
+                    Resources.logger(this.logSource).warn(
+                        `Retrying asset write for ${assetProgressDisplayName} after retryable error `
+                        + `(attempt ${attempt}/${ASSET_WRITE_ATTEMPTS}): ${iCPSError.toiCPSError(err).getDescription()}`,
+                    );
+                    continue;
+                }
+
+                Resources.emit(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, err, asset);
+                return;
+            }
+        }
+
         const downloadReason: AssetDownloadReason = replacedExistingAsset ? `redownloaded` : `new`;
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_DOWNLOADED, assetProgressDisplayName, downloadReason);
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, assetProgressDisplayName);
+    }
+
+    /**
+     * Determines whether a per-asset write should be retried without restarting the full sync.
+     * @param err - Error raised while downloading or verifying an asset
+     * @returns True if another attempt is likely to help
+     */
+    private isRetryableAssetWriteError(err: unknown): boolean {
+        const syncError = iCPSError.toiCPSError(err);
+        if (syncError.code === RESOURCES_ERR.DOWNLOAD_TIMEOUT.code) {
+            return true;
+        }
+
+        const axiosError = this.retryPolicy.getAxiosError(err);
+        if (!axiosError) {
+            return false;
+        }
+
+        return this.retryPolicy.isRetryableSyncError(err);
     }
 
     /**

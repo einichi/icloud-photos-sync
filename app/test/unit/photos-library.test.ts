@@ -1109,6 +1109,50 @@ describe(`Write state`, () => {
                 });
                 const folder = new Album(albumUUID, AlbumType.FOLDER, albumName, ``);
                 const library = new PhotosLibrary();
+
+                library.writeAlbum(folder);
+
+                expect(fs.existsSync(path.join(Config.defaultConfig.dataDir, `.${albumUUID}`))).toBeTruthy();
+                expect(fs.lstatSync(path.join(Config.defaultConfig.dataDir, albumName)).isSymbolicLink()).toBeTruthy();
+                expect(fs.readlinkSync(path.join(Config.defaultConfig.dataDir, albumName))).toEqual(`.${albumUUID}`);
+            });
+
+            test(`Folder - UUID path and matching named link already exist`, () => {
+                const albumUUID = `cc40a239-2beb-483e-acee-e897db1b818a`;
+                const albumName = `Memories`;
+                mockfs({
+                    [Config.defaultConfig.dataDir]: {
+                        [`.${albumUUID}`]: {},
+                        [albumName]: mockfs.symlink({
+                            path: `.${albumUUID}`,
+                        }),
+                    },
+                });
+                const folder = new Album(albumUUID, AlbumType.FOLDER, albumName, ``);
+                const library = new PhotosLibrary();
+
+                library.writeAlbum(folder);
+
+                expect(fs.existsSync(path.join(Config.defaultConfig.dataDir, `.${albumUUID}`))).toBeTruthy();
+                expect(fs.lstatSync(path.join(Config.defaultConfig.dataDir, albumName)).isSymbolicLink()).toBeTruthy();
+                expect(fs.readlinkSync(path.join(Config.defaultConfig.dataDir, albumName))).toEqual(`.${albumUUID}`);
+            });
+
+            test(`Folder - UUID path and conflicting named link already exist`, () => {
+                const albumUUID = `cc40a239-2beb-483e-acee-e897db1b818a`;
+                const albumName = `Memories`;
+                mockfs({
+                    [Config.defaultConfig.dataDir]: {
+                        [`.${albumUUID}`]: {},
+                        [`.different-uuid`]: {},
+                        [albumName]: mockfs.symlink({
+                            path: `.different-uuid`,
+                        }),
+                    },
+                });
+                const folder = new Album(albumUUID, AlbumType.FOLDER, albumName, ``);
+                const library = new PhotosLibrary();
+
                 expect(() => library.writeAlbum(folder)).toThrow(/^Unable to create album: Already exists$/);
             });
 

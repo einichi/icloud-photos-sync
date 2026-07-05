@@ -490,12 +490,11 @@ export class PhotosLibrary {
         const [albumNamePath, uuidPath] = this.findAlbumPaths(album);
 
         if (fs.existsSync(uuidPath)) {
-            throw new iCPSError(LIBRARY_ERR.EXISTS)
-                .addMessage(uuidPath)
-                .addContext(`album`, album);
+            this.repairExistingAlbum(album, albumNamePath, uuidPath);
+            return;
         }
 
-        if (fs.existsSync(albumNamePath)) {
+        if (this.pathExists(albumNamePath)) {
             throw new iCPSError(LIBRARY_ERR.EXISTS)
                 .addMessage(albumNamePath)
                 .addContext(`album`, album);
@@ -509,6 +508,31 @@ export class PhotosLibrary {
         fs.symlinkSync(path.basename(uuidPath), albumNamePath);
 
         // @remarks Something is wrong here - see E2E test
+        if (album.albumType === AlbumType.ALBUM) {
+            this.linkAlbumAssets(album, uuidPath);
+        }
+    }
+
+    /**
+     * Repairs an album whose UUID folder already exists from an earlier partial write.
+     * @param album - Album metadata from iCloud
+     * @param albumNamePath - Visible symlink path
+     * @param uuidPath - Hidden UUID folder path
+     */
+    private repairExistingAlbum(album: Album, albumNamePath: string, uuidPath: string) {
+        if (this.pathExists(albumNamePath)) {
+            if (!this.symlinkPointsTo(albumNamePath, uuidPath)) {
+                throw new iCPSError(LIBRARY_ERR.EXISTS)
+                    .addMessage(albumNamePath)
+                    .addContext(`album`, album);
+            }
+
+            Resources.logger(this).info(`Album ${album.getDisplayName()} already exists at ${uuidPath}; refreshing links`);
+        } else {
+            Resources.logger(this).info(`Repairing album ${album.getDisplayName()} by linking ${albumNamePath} to existing folder ${uuidPath}`);
+            fs.symlinkSync(path.basename(uuidPath), albumNamePath);
+        }
+
         if (album.albumType === AlbumType.ALBUM) {
             this.linkAlbumAssets(album, uuidPath);
         }
@@ -545,6 +569,12 @@ export class PhotosLibrary {
 
                     // Getting asset time, in order to update link as well
                     const assetTime = fs.statSync(assetPath).mtime;
+                    if (this.symlinkPointsTo(linkedAsset, assetPath)) {
+                        fs.lutimesSync(linkedAsset, assetTime, assetTime);
+                        usedNames.add(linkName);
+                        return;
+                    }
+
                     fs.symlinkSync(relativeAssetPath, linkedAsset);
                     fs.lutimesSync(linkedAsset, assetTime, assetTime);
                     usedNames.add(linkName);
@@ -686,6 +716,40 @@ export class PhotosLibrary {
             }
 
             throw err;
+        }
+    }
+
+    /**
+     * Checks path existence without following symlinks, so dead symlinks still count as occupied.
+     * @param filePath - Path to inspect
+     * @returns True if a directory entry exists
+     */
+    private pathExists(filePath: string): boolean {
+        try {
+            fs.lstatSync(filePath);
+            return true;
+        } catch (_err) {
+            return false;
+        }
+    }
+
+    /**
+     * Checks whether a symlink resolves to the expected path.
+     * @param linkPath - Symlink to inspect
+     * @param expectedTargetPath - Absolute target path expected
+     * @returns True if linkPath is a symlink to expectedTargetPath
+     */
+    private symlinkPointsTo(linkPath: string, expectedTargetPath: string): boolean {
+        try {
+            const linkStat = fs.lstatSync(linkPath);
+            if (!linkStat.isSymbolicLink()) {
+                return false;
+            }
+
+            const target = fs.readlinkSync(linkPath);
+            return path.resolve(path.dirname(linkPath), target) === expectedTargetPath;
+        } catch (_err) {
+            return false;
         }
     }
 
