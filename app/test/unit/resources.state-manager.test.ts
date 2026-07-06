@@ -629,6 +629,22 @@ describe(`State changes`, () => {
             progressDetail: `Fetching remote asset metadata (Primary library, All photos): pages 1-4/20, 800 raw records`
         }))
     })
+
+    test(`Should keep fetch progress when late auth/setup events arrive during metadata fetch`, () => {
+        mockedEventManager.emit(iCPSEventApp.SCHEDULED_START)
+        mockedEventManager.emit(iCPSEventSyncEngine.FETCH_N_LOAD)
+        mockedEventManager.emit(iCPSEventPhotos.READY)
+        mockedEventManager.emit(iCPSEventCloud.ACCOUNT_READY)
+        mockedEventManager.emit(iCPSEventPhotos.SETUP_COMPLETED)
+        mockedEventManager.emit(iCPSEventPhotos.FETCH_PROGRESS, `Fetching remote asset metadata (Primary library, All photos): pages 1-4/20, 800 raw records`)
+
+        expect(mockedState.serialize()).toEqual(expect.objectContaining({
+            state: `running`,
+            progress: 16.8,
+            progressMsg: `Loading local & fetching remote iCloud Library state...`,
+            progressDetail: `Fetching remote asset metadata (Primary library, All photos): pages 1-4/20, 800 raw records`
+        }))
+    })
 })
 
 describe(`Log added`, () => { 

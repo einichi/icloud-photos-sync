@@ -82,6 +82,11 @@ export class iCloudPhotos {
     private sessionRecovery?: Promise<void>;
 
     /**
+     * Deduplicates overlapping setup calls for the same Photos service instance.
+     */
+    private setupInProgress?: Promise<void>;
+
+    /**
      * Creates a new iCloud Photos Class
      */
     constructor() {
@@ -125,6 +130,23 @@ export class iCloudPhotos {
      * @emits iCPSEventPhotos.ERROR - In case of an error during setup - The iCPSError is provided as argument
      */
     async setup() {
+        if (this.setupInProgress) {
+            return this.setupInProgress;
+        }
+
+        this.setupInProgress = this.performSetup()
+            .finally(() => {
+                this.setupInProgress = undefined;
+            });
+
+        return this.setupInProgress;
+    }
+
+    /**
+     * Performs the actual iCloud Photos setup and waits for indexing readiness.
+     * @returns A promise resolving when Photos is ready
+     */
+    private async performSetup() {
         this.ready.catch(() => undefined);
         this.ready = this.getReady();
 

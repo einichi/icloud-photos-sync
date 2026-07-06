@@ -79,6 +79,39 @@ describe(`Setup iCloud Photos`, () => {
         expect(setupCompletedEvent).toHaveBeenCalledTimes(1);
     });
 
+    test(`Deduplicates overlapping setup attempts`, async () => {
+        photos.checkingIndexingStatus = jest.fn<typeof photos.checkingIndexingStatus>()
+            .mockImplementation(async () => {
+                mockedEventManager.emit(iCPSEventPhotos.READY);
+            });
+
+        const setupCompletedEvent = mockedEventManager.spyOnEvent(iCPSEventPhotos.SETUP_COMPLETED, false);
+
+        mockedValidator.validatePhotosSetupResponse = jest.fn<typeof mockedValidator.validatePhotosSetupResponse>()
+            .mockReturnValue({
+                data: {
+                    zones: []
+                } as Partial<PhotosSetupResponse[`data`]> as PhotosSetupResponse[`data`],
+            } as Partial<PhotosSetupResponse> as PhotosSetupResponse);
+        mockedNetworkManager.applyZones = jest.fn<typeof mockedNetworkManager.applyZones>();
+
+        mockedNetworkManager.mock
+            .onPost(setupPrivateURL, {})
+            .reply(200);
+        mockedNetworkManager.mock
+            .onPost(setupSharedURL, {})
+            .reply(200);
+
+        await Promise.all([
+            photos.setup(),
+            photos.setup(),
+        ]);
+
+        expect(mockedValidator.validatePhotosSetupResponse).toHaveBeenCalledTimes(2);
+        expect(mockedNetworkManager.applyZones).toHaveBeenCalledTimes(1);
+        expect(setupCompletedEvent).toHaveBeenCalledTimes(1);
+    });
+
     test(`Refreshes readiness on every setup attempt`, async () => {
         const firstSetupCompletedEvent = mockedEventManager.spyOnEvent(iCPSEventPhotos.SETUP_COMPLETED, false);
         photos.checkingIndexingStatus = jest.fn<typeof photos.checkingIndexingStatus>()

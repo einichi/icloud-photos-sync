@@ -147,59 +147,59 @@ export class StateManager {
         // Auth & setup process (0-20%)
         Resources.events(this)
             .on(iCPSEventCloud.AUTHENTICATION_STARTED, () => {
-                this.updateState(StateType.RUNNING, {
+                this.updateAuthSetupState({
                     progressMsg: `Authenticating user...`, 
                     progress: 1 * (this.prevTrigger === StateTrigger.AUTH ? 12.5 : 1)
                 });
             })
             .on(iCPSEventCloud.MFA_REQUIRED, (trustedPhoneNumbers: TrustedPhoneNumber[]) => {
-                this.updateState(StateType.BLOCKED, {
+                this.updateAuthSetupState({
                     progressMsg: `Waiting for MFA code...`, 
                     progress: 2 * (this.prevTrigger === StateTrigger.AUTH ? 12.5 : 1),
                     trustedPhoneNumbers
-                })
+                }, StateType.BLOCKED)
             })
             .on(iCPSEventMFA.MFA_RESEND, (method: MFAMethod) => {
-                this.updateState(StateType.BLOCKED, {
+                this.updateAuthSetupState({
                     progressMsg: `Resending MFA code via ${method.toString()}...`, 
                     progress: 2 * (this.prevTrigger === StateTrigger.AUTH ? 12.5 : 1)
-                });
+                }, StateType.BLOCKED);
             })
             .on(iCPSEventMFA.MFA_RECEIVED, (method: MFAMethod) => {
-                this.updateState(StateType.BLOCKED, {
+                this.updateAuthSetupState({
                     progressMsg: `MFA code received from ${method.toString()}`,
                     progress: 2 * (this.prevTrigger === StateTrigger.AUTH ? 12.5 : 1)
-                });
+                }, StateType.BLOCKED);
             })
             .on(iCPSEventCloud.AUTHENTICATED, () => {
-                this.updateState(StateType.RUNNING, {
+                this.updateAuthSetupState({
                     progressMsg: `User authenticated`, 
                     progress: 5 * (this.prevTrigger === StateTrigger.AUTH ? 12.5 : 1)
                 });
             })
             .on(iCPSEventCloud.TRUSTED, () => {
-                this.updateState(StateType.RUNNING, {
+                this.updateAuthSetupState({
                     progressMsg: `Device trusted`, 
                     progress: 8 * (this.prevTrigger === StateTrigger.AUTH ? 12.5 : 1)
                 });
             })
             .on(iCPSEventCloud.PCS_REQUIRED, () => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Advanced Data Protection requires additional cookies, acquiring...`, progress: 9});
+                this.updateAuthSetupState({progressMsg: `Advanced Data Protection requires additional cookies, acquiring...`, progress: 9});
             })
             .on(iCPSEventCloud.PCS_NOT_READY, () => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Advanced Data Protection request not confirmed yet, retrying...`, progress: 9});
+                this.updateAuthSetupState({progressMsg: `Advanced Data Protection request not confirmed yet, retrying...`, progress: 9});
             })
             .on(iCPSEventCloud.ACCOUNT_READY, () => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Sign in successful!`, progress: 10});
+                this.updateAuthSetupState({progressMsg: `Sign in successful!`, progress: 10});
             })
             .on(iCPSEventCloud.SESSION_EXPIRED, () => {
-                this.updateState(StateType.RUNNING, {progressMsg: `Session expired, re-authenticating...`, progress: 0});
+                this.updateAuthSetupState({progressMsg: `Session expired, re-authenticating...`, progress: 0});
             })
             .on(iCPSEventPhotos.SETUP_COMPLETED, () => {
-                this.updateState(StateType.RUNNING, {progressMsg: `iCloud Photos setup completed, checking indexing status...`, progress: 11});
+                this.updateAuthSetupState({progressMsg: `iCloud Photos setup completed, checking indexing status...`, progress: 11});
             })
             .on(iCPSEventPhotos.READY, () => {
-                this.updateState(StateType.RUNNING, {progressMsg: `iCloud Photos ready!`, progress: 15});
+                this.updateAuthSetupState({progressMsg: `iCloud Photos ready!`, progress: 15});
             });
 
         // Sync process
@@ -477,6 +477,22 @@ export class StateManager {
             progressDetail: detail,
             progress: progress ?? this.parseFetchAndLoadProgress(detail) ?? this.inProgressContext.progress
         });
+    }
+
+    /**
+     * Updates authentication/setup progress unless a sync has already advanced into fetch/load or later.
+     * @param ctx - Progress context to apply
+     * @param state - State to set
+     */
+    private updateAuthSetupState(ctx: {progress?: number, progressMsg?: string, progressDetail?: string, trustedPhoneNumbers?: TrustedPhoneNumber[]}, state: StateType = StateType.RUNNING) {
+        if (this.prevTrigger === StateTrigger.SYNC
+            && this.state === StateType.RUNNING
+            && (this.inProgressContext.progress ?? 0) >= SYNC_PROGRESS.FETCH_LOAD_START) {
+            Resources.logger(this).debug(`Ignoring late auth/setup progress after sync fetch started: ${ctx.progressMsg}`);
+            return;
+        }
+
+        this.updateState(state, ctx);
     }
 
     /**
