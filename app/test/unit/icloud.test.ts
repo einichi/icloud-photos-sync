@@ -218,7 +218,7 @@ describe.each([
             await icloud.authenticate();
 
             expect(icloud.getTrustedPhoneNumbers).toHaveBeenCalled()
-            expect(icloud.requestTrustedDeviceMFA).not.toHaveBeenCalled()
+            expect(icloud.requestTrustedDeviceMFA).toHaveBeenCalled()
             expect(trustedEvent).not.toHaveBeenCalled();
             expect(authenticationEvent).toHaveBeenCalled();
             expect(mfaEvent).toHaveBeenCalledWith(`someVal`);
@@ -385,7 +385,7 @@ describe.each([
 
 	        expect(icloud.getSRPLogin).toHaveBeenNthCalledWith(1, undefined, true);
 	        expect(icloud.getSRPLogin).toHaveBeenNthCalledWith(2, undefined, false);
-	        expect(icloud.requestTrustedDeviceMFA).not.toHaveBeenCalled();
+	        expect(icloud.requestTrustedDeviceMFA).toHaveBeenCalled();
 	        expect(mfaEvent).toHaveBeenCalledWith([]);
 	        expect(errorEvent).not.toHaveBeenCalled();
 	    });
@@ -832,7 +832,7 @@ describe.each([
                     mockedNetworkManager.sessionId = Config.iCloudAuthSecrets.sessionSecret;
 
                     mockedNetworkManager.mock
-                        .onPut(endpoint,
+                        .onPost(endpoint,
                             payload,
                             {
                                 headers: {
@@ -861,7 +861,7 @@ describe.each([
                     mockedNetworkManager.sessionId = Config.iCloudAuthSecrets.sessionSecret;
 
                     mockedNetworkManager.mock
-                        .onPut(endpoint,
+                        .onPost(endpoint,
                             payload,
                             {
                                 headers: {
@@ -887,7 +887,7 @@ describe.each([
                     mockedNetworkManager.sessionId = Config.iCloudAuthSecrets.sessionSecret;
 
                     mockedNetworkManager.mock
-                        .onPut(endpoint,
+                        .onPost(endpoint,
                             payload,
                             {
                                 headers: {
@@ -944,7 +944,7 @@ describe.each([
                     mockedNetworkManager.sessionId = Config.iCloudAuthSecrets.sessionSecret;
 
                     mockedNetworkManager.mock
-                        .onPut(endpoint,
+                        .onPost(endpoint,
                             payload,
                             {
                                 headers: {

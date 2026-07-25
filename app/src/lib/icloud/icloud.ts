@@ -168,7 +168,7 @@ export class iCloud {
                     Resources.logger(this).warn(`iCloud required MFA even though a stored trust token was included; the token may be expired, revoked, or not accepted by Apple`);
                 }
                 const trustedPhoneNumbers = await this.getTrustedPhoneNumbers()
-                Resources.logger(this).info(`Waiting for the current MFA challenge; use resend if no code arrives`);
+                await this.requestTrustedDeviceMFA();
                 Resources.emit(iCPSEventCloud.MFA_REQUIRED, trustedPhoneNumbers);
                 return;
             }
@@ -483,7 +483,7 @@ export class iCloud {
     }
 
     /**
-     * Explicitly requests a trusted-device MFA push. This is used for manual resend to avoid invalidating an existing challenge.
+     * Explicitly requests a trusted-device MFA push. Newer Apple auth flows no longer reliably send this from the SRP 409 alone.
      */
     async requestTrustedDeviceMFA(): Promise<void> {
         Resources.logger(this).info(`Requesting MFA code on trusted devices`);
@@ -559,7 +559,7 @@ export class iCloud {
             const data = method.getEnterPayload(mfa);
 
             Resources.logger(this).debug(`Entering MFA code via URL ${url} with redacted payload`);
-            await Resources.network().put(url, data, config);
+            await Resources.network().post(url, data, config);
 
             Resources.logger(this).info(`MFA code correct!`);
             Resources.emit(iCPSEventCloud.AUTHENTICATED);
@@ -585,7 +585,14 @@ export class iCloud {
                 return;
             }
 
-            Resources.emit(iCPSEventCloud.ERROR, new iCPSError(MFA_ERR.SUBMIT_FAILED).addCause(err));
+            const submitError = new iCPSError(MFA_ERR.SUBMIT_FAILED).addCause(err);
+            if ((err as AxiosError).isAxiosError) {
+                submitError
+                    .addMessage(`Submitted endpoint: ${this.describeAxiosRequest(err as AxiosError)}`)
+                    .addMessage(`Response body: ${this.describeAxiosResponseData(err as AxiosError)}`)
+                    .addContext(`status`, (err as AxiosError).response?.status);
+            }
+            Resources.emit(iCPSEventCloud.ERROR, submitError);
         }
     }
 
