@@ -2,7 +2,7 @@ import * as http from 'http';
 import {readFileSync} from 'fs';
 import {jsonc} from 'jsonc';
 import {MFAMethod} from '../../lib/icloud/mfa/mfa-method.js';
-import {iCPSEventMFA, iCPSEventRuntimeWarning, iCPSEventWebServer} from '../../lib/resources/events-types.js';
+import {iCPSEventCloud, iCPSEventMFA, iCPSEventRuntimeWarning, iCPSEventWebServer} from '../../lib/resources/events-types.js';
 import {Resources} from '../../lib/resources/main.js';
 import {RESOURCES_ERR, WEB_SERVER_ERR} from '../error/error-codes.js';
 import {iCPSError} from '../error/error.js';
@@ -62,6 +62,11 @@ export class WebServer {
     notificationPusher: NotificationPusher = new NotificationPusher();
 
     /**
+     * In-flight explicit authentication renewal.
+     */
+    private reauthPromise?: Promise<unknown>;
+
+    /**
      * Routing table for this server
      */
     _sitemap: WebServerSitemap = {
@@ -119,6 +124,9 @@ export class WebServer {
 
         // Default MFA request always goes to device
         this.mfaMethod = new MFAMethod();
+        Resources.events(this).on(iCPSEventCloud.MFA_REQUIRED, () => {
+            this.mfaMethod.update(`device`);
+        });
     }
 
     /* c8 ignore start */
@@ -542,7 +550,16 @@ export class WebServer {
      * @returns A promise that resolves when the reauthentication process is complete
      */
     triggerReauth(app: TokenApp = new TokenApp()): Promise<unknown> {
-        return app.run()
+        if (this.reauthPromise) {
+            Resources.logger(this).info(`Reauthentication already in progress; reusing active authentication request`);
+            return this.reauthPromise;
+        }
+
+        this.reauthPromise = app.run()
+            .finally(() => {
+                this.reauthPromise = undefined;
+            });
+        return this.reauthPromise;
     }
 
     /**

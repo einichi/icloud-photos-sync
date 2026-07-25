@@ -40,6 +40,15 @@ describe(`Constructor`, () => {
         expect(webServer.mfaMethod.isDevice).toBeTruthy()
     })
 
+    test(`Should reset MFA Method to device when a new MFA challenge starts`, () => {
+        const webServer = new WebServer()
+        webServer.mfaMethod.update(`sms`, 2);
+
+        mockedEventManager.emit(iCPSEventCloud.MFA_REQUIRED);
+
+        expect(webServer.mfaMethod.isDevice).toBeTruthy()
+    })
+
     describe(`HTTP Server`, () => {
         test(`Should spawn webserver`, async () =>{
             WebServer.prototype.startServer = jest.fn<typeof WebServer.prototype.startServer>().mockResolvedValue({} as WebServer)
@@ -551,6 +560,28 @@ describe.each([
             await expect(webServer.triggerReauth(tokenApp)).resolves.toBe(`test`)
             expect(tokenApp.run).toHaveBeenCalled()
         })
+
+        test(`Reuses in-flight reauth run`, async () => {
+            let resolveReauth: (value: unknown) => void;
+            const tokenApp = {
+                run: jest.fn<typeof tokenApp.run>().mockImplementation(() => new Promise(resolve => {
+                    resolveReauth = resolve;
+                }))
+            } as unknown as TokenApp
+            const secondTokenApp = {
+                run: jest.fn<typeof tokenApp.run>().mockResolvedValue(`second`)
+            } as unknown as TokenApp
+
+            const firstRun = webServer.triggerReauth(tokenApp);
+            const secondRun = webServer.triggerReauth(secondTokenApp);
+
+            expect(secondRun).toBe(firstRun);
+            expect(tokenApp.run).toHaveBeenCalledTimes(1);
+            expect(secondTokenApp.run).not.toHaveBeenCalled();
+
+            resolveReauth!(`test`);
+            await expect(firstRun).resolves.toBe(`test`);
+        })
     });
 
     describe(`Credentials request`, () => {
@@ -804,6 +835,11 @@ describe.each([
                     phoneNumberId: `2`,
                     phoneNumber: 2
                 },{
+                    mfaMethod: `sms`,
+                    mfaString: `'SMS' (Number ID: 0)`,
+                    phoneNumberId: `0`,
+                    phoneNumber: 0
+                },{
                     mfaMethod: `voice`,
                     mfaString: `'Voice' (Number ID: 1)`
                 },{
@@ -829,7 +865,7 @@ describe.each([
                 expect(res._getJSONData()).toEqual({
                     message: `Requesting MFA resend with method ${mfaString}`,
                 });
-                if(phoneNumberId) {
+                if(phoneNumberId !== undefined) {
                     expect(updateSpy).toHaveBeenCalledWith(mfaMethod, phoneNumber)
                 } else {
                     expect(updateSpy).toHaveBeenCalledWith(mfaMethod)
@@ -1672,6 +1708,19 @@ describe.each([
                     expect(getByTestId(site.body, `cancel-button`)).toBeEnabled()
                     // This should happen - not sure why it does not
                     // expect(site.mockedFunctions.navigate).toHaveBeenCalledWith(`/submit-mfa`)
+                    expect(site.mockedFunctions.alert).not.toHaveBeenCalled()
+                })
+
+                test(`requests mfa code via sms, id 0`, async () => {
+                    mockedEventManager.emit(iCPSEventCloud.MFA_REQUIRED, [{id: 0, numberWithDialCode: `+000`}])
+                    await site.load(`${webBasePath}/request-mfa`);
+
+                    getByTestId(site.body, `sms-button`).click()
+                    expect(getByTestId(site.body, `sms-option-0`)).toBeVisible()
+                    expect(getByTestId(site.body, `sms-option-0`).children[0].textContent).toEqual(`+000`)
+                    getByTestId(site.body, `sms-option-0`).click()
+
+                    expect(site.mockedFunctions.fetch).toHaveBeenCalledWith(`${webBasePath}/api/resend_mfa?method=sms&phoneNumberId=0`, {method: `POST`})
                     expect(site.mockedFunctions.alert).not.toHaveBeenCalled()
                 })
 

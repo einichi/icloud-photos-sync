@@ -33,7 +33,7 @@ async function requestMfaWithMethod(method, id) {
             el.style['background-color'] = 'rgb(147 157 179)'
         });
 
-        const url = id ?
+        const url = id !== undefined && id !== null ?
             '${basePath}/api/resend_mfa?method=' + method + '&phoneNumberId=' + id :
             '${basePath}/api/resend_mfa?method=' + method
 
