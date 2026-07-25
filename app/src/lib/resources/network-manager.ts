@@ -112,6 +112,21 @@ export class HeaderJar {
             this.setHeader(new Header(`idmsa.apple.com`, HEADER_KEYS.SCNT, response.headers.scnt));
         }
 
+        if (response.headers[`x-apple-id-session-id`] && this.isApplicable(response.config, new Header(`idmsa.apple.com`, ``, ``))) {
+            Resources.logger(this).debug(`Extracted Apple ID session ID from response header with length ` + response.headers[`x-apple-id-session-id`].length);
+            this.setHeader(new Header(`idmsa.apple.com`, HEADER_KEYS.SESSION_ID, response.headers[`x-apple-id-session-id`]));
+        }
+
+        if (response.headers[`x-apple-session-token`]) {
+            Resources.logger(this).debug(`Extracted Apple session token from response header with length ` + response.headers[`x-apple-session-token`].length);
+            Resources.manager().sessionSecret = response.headers[`x-apple-session-token`];
+        }
+
+        if (response.headers[`x-apple-auth-attributes`] && this.isApplicable(response.config, new Header(`idmsa.apple.com`, ``, ``))) {
+            Resources.logger(this).debug(`Extracted Apple auth attributes from response header with length ` + response.headers[`x-apple-auth-attributes`].length);
+            this.setHeader(new Header(`idmsa.apple.com`, HEADER_KEYS.AUTH_ATTRIBUTES, response.headers[`x-apple-auth-attributes`]));
+        }
+
         if (response.headers[`set-cookie`] && Array.isArray(response.headers[`set-cookie`])) {
             response.headers[`set-cookie`].forEach(cookie => {
                 const parsedCookie = Cookie.parse(cookie);
@@ -274,6 +289,7 @@ export class NetworkManager {
 
         this._headerJar.clearHeader(HEADER_KEYS.SCNT);
         this._headerJar.clearHeader(HEADER_KEYS.SESSION_ID);
+        this._headerJar.clearHeader(HEADER_KEYS.AUTH_ATTRIBUTES);
 
         await this.settleRateLimiter();
         await this.settleCCYLimiter();
@@ -351,12 +367,11 @@ export class NetworkManager {
     }
 
     /**
-     * Persists the X-Apple-Id-Session-Id header required for the MFA flow, stores it as sessionSecret and adds the relevant header to the header jar
+     * Persists the X-Apple-Id-Session-Id header required for the MFA flow.
      * @param sessionId - The session id value to use
      */
     set sessionId(sessionId: string) {
-        Resources.logger(this).debug(`Setting session secret to ${sessionId}`);
-        Resources.manager().sessionSecret = sessionId;
+        Resources.logger(this).debug(`Setting Apple ID session ID with length ${sessionId.length}`);
         this._headerJar.setHeader(new Header(`idmsa.apple.com`, HEADER_KEYS.SESSION_ID, sessionId));
     }
 
@@ -364,7 +379,7 @@ export class NetworkManager {
      * Persist the session token as session secret, required for setup
      */
     set sessionToken(sessionToken: string) {
-        Resources.logger(this).debug(`Setting session secret to ${sessionToken}`);
+        Resources.logger(this).debug(`Setting session secret with length ${sessionToken.length}`);
         Resources.manager().sessionSecret = sessionToken;
     }
 
@@ -388,11 +403,12 @@ export class NetworkManager {
     }
 
     /**
-     * Applies configurations from the response received if the MFA code is required. This includes setting the AASP cookie, the scnt header and session token.
+     * Applies configurations from the response received if the MFA code is required. This includes setting the Apple ID session ID for MFA and the session token for later setup.
      * @param signinResponse- The response received from the server
      */
     applySigninResponse(signinResponse: SigninResponse) {
-        this.sessionId = signinResponse.headers[`x-apple-session-token`];
+        this.sessionId = signinResponse.headers[`x-apple-id-session-id`] ?? signinResponse.headers[`x-apple-session-token`];
+        this.sessionToken = signinResponse.headers[`x-apple-session-token`];
     }
 
     /**

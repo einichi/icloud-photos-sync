@@ -153,6 +153,7 @@ export class iCloud {
                     Resources.logger(this).warn(`iCloud required MFA even though a stored trust token was included; the token may be expired, revoked, or not accepted by Apple`);
                 }
                 const trustedPhoneNumbers = await this.getTrustedPhoneNumbers()
+                await this.requestTrustedDeviceMFA();
                 Resources.emit(iCPSEventCloud.MFA_REQUIRED, trustedPhoneNumbers);
                 return;
             }
@@ -273,11 +274,53 @@ export class iCloud {
         try {
             const authInformationResponse = await Resources.network().get(ENDPOINTS.AUTH.BASE)
             const validatedAuthInformationResponse = Resources.validator().validateAuthInformationResponse(authInformationResponse)
-            return validatedAuthInformationResponse.data.trustedPhoneNumbers
+            return this.getTrustedPhoneNumbersFromAuthInformation(validatedAuthInformationResponse)
         } catch (err) {
             Resources.emit(iCPSEventRuntimeWarning.TRUSTED_PHONE_NUMBERS_ERROR, new iCPSError(MFA_ERR.NO_PHONE_NUMBERS).addCause(err));
         }
         return []
+    }
+
+    private getTrustedPhoneNumbersFromAuthInformation(authInformationResponse: {data: {
+        trustedPhoneNumbers?: TrustedPhoneNumber[],
+        trustedPhoneNumber?: TrustedPhoneNumber,
+        phoneNumberVerification?: {
+            trustedPhoneNumbers?: TrustedPhoneNumber[],
+            trustedPhoneNumber?: TrustedPhoneNumber,
+        }
+    }}): TrustedPhoneNumber[] {
+        const phoneNumberVerification = authInformationResponse.data.phoneNumberVerification;
+        const trustedPhoneNumbers = authInformationResponse.data.trustedPhoneNumbers
+            ?? phoneNumberVerification?.trustedPhoneNumbers
+            ?? [];
+        const trustedPhoneNumber = authInformationResponse.data.trustedPhoneNumber
+            ?? phoneNumberVerification?.trustedPhoneNumber;
+
+        if (trustedPhoneNumbers.length > 0) {
+            return trustedPhoneNumbers;
+        }
+
+        return trustedPhoneNumber ? [trustedPhoneNumber] : [];
+    }
+
+    /**
+     * Explicitly requests a trusted-device MFA push. Newer Apple auth flows no longer reliably send this from the SRP 409 alone.
+     */
+    async requestTrustedDeviceMFA(): Promise<void> {
+        Resources.logger(this).info(`Requesting MFA code on trusted devices`);
+
+        try {
+            await Resources.network().put(
+                ENDPOINTS.AUTH.BASE + ENDPOINTS.AUTH.PATH.MFA.DEVICE_RESEND,
+                undefined,
+                {
+                    validateStatus: status => status === 202 || status === 204,
+                },
+            );
+            Resources.logger(this).info(`Successfully requested new MFA code on trusted devices`);
+        } catch (err) {
+            Resources.emit(iCPSEventRuntimeWarning.MFA_ERROR, new iCPSError(MFA_ERR.RESEND_FAILED).addCause(err));
+        }
     }
 
     /**
@@ -307,6 +350,11 @@ export class iCloud {
             }
 
             if (method.isDevice) {
+                if (response.status === 204 || !response.data) {
+                    Resources.logger(this).info(`Successfully requested new MFA code on trusted devices`);
+                    return;
+                }
+
                 const validatedResponse = Resources.validator().validateResendMFADeviceResponse(response);
                 Resources.logger(this).info(`Successfully requested new MFA code using ${validatedResponse.data.trustedDeviceCount} trusted device(s)`);
             }

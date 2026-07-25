@@ -32,6 +32,8 @@ export const CLIENT_INFO = jsonc.stringify({
 export const HEADER_KEYS = {
     SCNT: `scnt`,
     SESSION_ID: `X-Apple-ID-Session-Id`,
+    SESSION_TOKEN: `X-Apple-Session-Token`,
+    AUTH_ATTRIBUTES: `X-Apple-Auth-Attributes`,
     COOKIE: `Cookie`,
 };
 
@@ -61,7 +63,7 @@ export const ENDPOINTS = {
                 COMPLETE: `/signin/complete`,
             },
             MFA: {
-                DEVICE_RESEND: `/verify/trusteddevice`,
+                DEVICE_RESEND: `/verify/trusteddevice/securitycode`,
                 DEVICE_ENTER: `/verify/trusteddevice/securitycode`,
                 PHONE_RESEND: `/verify/phone`,
                 PHONE_ENTER: `/verify/phone/securitycode`,
@@ -136,6 +138,11 @@ export type SigninResponse = {
          */
         scnt: string,
         /**
+         * Session ID - required to keep track of MFA request
+         * @minLength 1
+         */
+        'x-apple-id-session-id'?: string, // eslint-disable-line
+        /**
          * Session secret - required to keep track of MFA request
          * @minLength 1
          */
@@ -200,7 +207,12 @@ export type AuthInformationResponse = {
         /**
          * @minItems 1
          */
-        trustedPhoneNumbers: TrustedPhoneNumber[]
+        trustedPhoneNumbers?: TrustedPhoneNumber[],
+        trustedPhoneNumber?: TrustedPhoneNumber,
+        phoneNumberVerification?: {
+            trustedPhoneNumbers?: TrustedPhoneNumber[],
+            trustedPhoneNumber?: TrustedPhoneNumber,
+        }
     }
 }
 

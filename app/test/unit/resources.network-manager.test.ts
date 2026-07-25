@@ -239,6 +239,18 @@ describe(`HeaderJar`, () => {
                     {key: `scnt`, value: `someValue`, domain: `idmsa.apple.com`},
                 ],
             }, {
+                desc: `Apple session headers from idmsa.apple.com`,
+                url: `idmsa.apple.com`,
+                headers: {
+                    'x-apple-id-session-id': `someSessionId`,
+                    'x-apple-auth-attributes': `someAuthAttributes`,
+                },
+                extractedCookies: [],
+                extractedHeaders: [
+                    {key: `X-Apple-ID-Session-Id`, value: `someSessionId`, domain: `idmsa.apple.com`},
+                    {key: `X-Apple-Auth-Attributes`, value: `someAuthAttributes`, domain: `idmsa.apple.com`},
+                ],
+            }, {
                 desc: `scnt header from non idmsa.apple.com`,
                 url: `icloud.com`,
                 headers: {
@@ -288,6 +300,26 @@ describe(`HeaderJar`, () => {
 
             expect(Array.from(headerJar.cookies.values())).toMatchObject(extractedCookies);
             expect(Array.from(headerJar.headers.values())).toMatchObject(extractedHeaders);
+        });
+
+        test(`Extracts Apple session token without setting MFA session ID`, () => {
+            const axiosInstance = axios.create();
+            const headerJar = new HeaderJar(axiosInstance);
+
+            headerJar.headers.clear();
+            headerJar.cookies.clear();
+
+            headerJar._extractHeaders({
+                config: {
+                    baseURL: `idmsa.apple.com`,
+                },
+                headers: {
+                    'x-apple-session-token': `someSessionToken`,
+                },
+            } as any);
+
+            expect(Resources.manager()._resources.sessionSecret).toEqual(`someSessionToken`);
+            expect(headerJar.headers.has(`X-Apple-ID-Session-Id`)).toBeFalsy();
         });
     });
 
@@ -638,7 +670,7 @@ describe(`NetworkManager`, () => {
         describe(`Setter methods`, () => {
             test(`set sessionID`, () => {
                 networkManager.sessionId = `someSessionId`;
-                expect(Resources.manager()._resources.sessionSecret).toEqual(`someSessionId`);
+                expect(Resources.manager()._resources.sessionSecret).toBeUndefined();
                 expect(networkManager._headerJar.headers.get(`X-Apple-ID-Session-Id`)!.value).toEqual(`someSessionId`);
             });
 
@@ -662,6 +694,7 @@ describe(`NetworkManager`, () => {
                     },
                     headers: {
                         scnt: `someScnt`,
+                        'x-apple-id-session-id': `someSessionId`,
                         'x-apple-session-token': `someSessionToken`,
                         'set-cookie': [],
                     },
@@ -670,7 +703,7 @@ describe(`NetworkManager`, () => {
                 networkManager.applySigninResponse(signinResponse);
 
                 expect(Resources.manager()._resources.sessionSecret).toEqual(`someSessionToken`);
-                expect(networkManager._headerJar.headers.get(`X-Apple-ID-Session-Id`)!.value).toEqual(`someSessionToken`);
+                expect(networkManager._headerJar.headers.get(`X-Apple-ID-Session-Id`)!.value).toEqual(`someSessionId`);
             });
 
             test(`Apply TrustResponse`, () => {

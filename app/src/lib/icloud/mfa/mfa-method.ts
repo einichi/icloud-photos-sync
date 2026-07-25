@@ -147,7 +147,7 @@ export class MFAMethod {
             return status === 200;
         default:
         case MFAMethodType.DEVICE:
-            return status === 202;
+            return status === 202 || status === 204;
         }
     }
 

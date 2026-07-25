@@ -442,19 +442,42 @@ describe(`Validator`, () => {
                     }
                 },
             },
+            {
+                data: {
+                    data: {
+                        trustedPhoneNumber: {
+                            id: 1,
+                            numberWithDialCode: `123`,
+                            pushMode: `sms`,
+                            obfuscatedNumber: `***`,
+                            lastTwoDigits: `12`
+                        },
+                    }
+                },
+            },
+            {
+                data: {
+                    data: {
+                        phoneNumberVerification: {
+                            trustedPhoneNumbers: [
+                                {
+                                    id: 1,
+                                    numberWithDialCode: `123`,
+                                    pushMode: `sms`,
+                                    obfuscatedNumber: `***`,
+                                    lastTwoDigits: `12`
+                                }
+                            ],
+                        }
+                    }
+                },
+            },
         ])(`should validate a valid signin response`, ({data}) => {
             expect(() => validator.validateAuthInformationResponse(data)).not.toThrow();
         });
 
         test.each([
             {
-                data: {
-                    data: {
-                        trustedPhoneNumbers: [],
-                    }
-                },
-                desc: `empty phoneNumbers array`,
-            }, {
                 data: {
                     data: {}
                 },
