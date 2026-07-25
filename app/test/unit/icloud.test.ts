@@ -281,6 +281,31 @@ describe.each([
                 expect(errorEvent).toHaveBeenCalledTimes(1);
                 expect(legacy ? icloud.getLegacyLogin : icloud.getSRPLogin).toHaveBeenCalled();
             });
+
+            test(`Authentication rejection includes safe Apple service error diagnostics`, async () => {
+                mockedNetworkManager.mock
+                    .onPost(authenticationUrl, authenticationPayload, {headers: Config.REQUEST_HEADER.AUTH})
+                    .reply(403, {
+                        serviceErrors: [{
+                            code: `-20101`,
+                            title: `Authentication Failed`,
+                            message: `Account user@example.com was rejected at https://idmsa.apple.com/appleauth/auth/signin/complete?token=secret`,
+                            unusedSecret: `do-not-log`,
+                        }],
+                    });
+
+                const errorEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.ERROR, false);
+
+                await expect(icloud.authenticate()).rejects.toThrow(/^iCloud rejected the authentication request/);
+
+                const authError = errorEvent.mock.calls[0][0] as iCPSError;
+                const description = authError.getDescription();
+
+                expect(description).toContain(`Response body: object keys: serviceErrors; serviceErrors: #1 code=-20101 title=Authentication Failed message=Account [redacted-email] was rejected at [redacted-url]`);
+                expect(description).not.toContain(`user@example.com`);
+                expect(description).not.toContain(`token=secret`);
+                expect(description).not.toContain(`do-not-log`);
+            });
         });
 
         test(`Unknown authentication error`, async () => {

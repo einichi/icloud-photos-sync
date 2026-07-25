@@ -260,10 +260,58 @@ export class iCloud {
 
         if (typeof data === `object`) {
             const keys = Object.keys(data).sort();
-            return keys.length === 0 ? `object with no keys` : `object keys: ${keys.join(`, `)}`;
+            const description = keys.length === 0 ? `object with no keys` : `object keys: ${keys.join(`, `)}`;
+            const serviceErrors = this.describeServiceErrors(data);
+            return serviceErrors ? `${description}; serviceErrors: ${serviceErrors}` : description;
         }
 
         return typeof data;
+    }
+
+    private describeServiceErrors(data: object): string | undefined {
+        const serviceErrors = this.getRecordField(data, `serviceErrors`) ?? this.getRecordField(data, `service_errors`);
+        if (!Array.isArray(serviceErrors)) {
+            return undefined;
+        }
+
+        if (serviceErrors.length === 0) {
+            return `none`;
+        }
+
+        return serviceErrors
+            .map((serviceError, index) => this.describeServiceError(serviceError, index))
+            .join(` | `);
+    }
+
+    private describeServiceError(serviceError: unknown, index: number): string {
+        if (!this.isRecord(serviceError)) {
+            return `#${index + 1} ${typeof serviceError}`;
+        }
+
+        const fields = [`#${index + 1}`];
+        for (const key of [`code`, `errorCode`, `reason`, `title`, `message`, `errorMessage`]) {
+            const value = serviceError[key];
+            if ([`string`, `number`, `boolean`].includes(typeof value)) {
+                fields.push(`${key}=${this.sanitizeDiagnosticText(String(value))}`);
+            }
+        }
+
+        return fields.join(` `);
+    }
+
+    private getRecordField(record: object, key: string): unknown {
+        return (record as Record<string, unknown>)[key];
+    }
+
+    private isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === `object` && value !== null && !Array.isArray(value);
+    }
+
+    private sanitizeDiagnosticText(value: string): string {
+        return value
+            .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, `[redacted-email]`)
+            .replace(/https?:\/\/\S+/gi, `[redacted-url]`)
+            .slice(0, 200);
     }
 
     /**
