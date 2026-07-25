@@ -576,10 +576,18 @@ export class iCloud {
             }
 
             if (err.response?.status === 409) {
+                if (this.isAcceptedMFAConflict(err)) {
+                    Resources.logger(this).info(`MFA code accepted with conflict response`);
+                    Resources.emit(iCPSEventCloud.AUTHENTICATED);
+                    this.clearMFATimeout();
+                    return;
+                }
+
                 this.clearMFATimeout();
                 Resources.emit(iCPSEventCloud.ERROR, new iCPSError(MFA_ERR.CHALLENGE_MISMATCH)
                     .addMessage(`Start a new authentication request and enter the newest MFA code`)
                     .addMessage(`Submitted endpoint: ${this.describeAxiosRequest(err as AxiosError)}`)
+                    .addMessage(`Response body: ${this.describeAxiosResponseData(err as AxiosError)}`)
                     .addContext(`mfaMethod`, method.toString())
                     .addCause(err));
                 return;
@@ -594,6 +602,33 @@ export class iCloud {
             }
             Resources.emit(iCPSEventCloud.ERROR, submitError);
         }
+    }
+
+    private isAcceptedMFAConflict(err: unknown): boolean {
+        if (!(err as AxiosError).isAxiosError) {
+            return false;
+        }
+
+        const data = (err as AxiosError).response?.data;
+        return this.getSecurityCodeValid(data) === true;
+    }
+
+    private getSecurityCodeValid(data: unknown): boolean | undefined {
+        if (!this.isRecord(data)) {
+            return undefined;
+        }
+
+        const securityCode = data.securityCode;
+        if (this.isRecord(securityCode) && typeof securityCode.valid === `boolean`) {
+            return securityCode.valid;
+        }
+
+        const phoneNumberVerification = data.phoneNumberVerification;
+        if (this.isRecord(phoneNumberVerification)) {
+            return this.getSecurityCodeValid(phoneNumberVerification);
+        }
+
+        return undefined;
     }
 
     /**
