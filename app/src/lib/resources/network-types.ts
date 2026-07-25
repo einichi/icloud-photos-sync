@@ -34,6 +34,8 @@ export const HEADER_KEYS = {
     SESSION_ID: `X-Apple-ID-Session-Id`,
     SESSION_TOKEN: `X-Apple-Session-Token`,
     AUTH_ATTRIBUTES: `X-Apple-Auth-Attributes`,
+    OAUTH_STATE: `X-Apple-OAuth-State`,
+    FRAME_ID: `X-Apple-Frame-Id`,
     COOKIE: `Cookie`,
 };
 
@@ -58,6 +60,8 @@ export const ENDPOINTS = {
         BASE: `https://idmsa.apple.com/appleauth/auth`,
         PATH: {
             SIGNIN: {
+                AUTHORIZE: `/authorize/signin`,
+                FEDERATE: `/federate`,
                 LEGACY: `/signin`,
                 INIT: `/signin/init`,
                 COMPLETE: `/signin/complete`,

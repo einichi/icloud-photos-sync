@@ -527,6 +527,17 @@ describe(`State changes`, () => {
                 progressMsg: `Starting auth...`
             } as SerializedState
         },{
+            desc: `Should set custom error on forbidden error`,
+            events: [iCPSEventWebServer.REAUTH_REQUESTED, [iCPSEventWebServer.REAUTH_ERROR, new iCPSError(AUTH_ERR.FORBIDDEN)]],
+            serializedState: {
+                state: `ready`,
+                nextSync: undefined,
+                prevError: {code: `AUTH_FORBIDDEN`, message: `iCloud rejected the authentication request. Check your iCloud credentials and Apple Account security prompts, then try renewing authentication again.`},
+                prevTrigger: `auth`,
+                progress: 0,
+                progressMsg: `Starting auth...`
+            } as SerializedState
+        },{
             desc: `Should set custom error on mfa not provided error`,
             events: [iCPSEventWebServer.REAUTH_REQUESTED, [iCPSEventWebServer.REAUTH_ERROR, new iCPSError(WEB_SERVER_ERR.MFA_CODE_NOT_PROVIDED)]],
             serializedState: {

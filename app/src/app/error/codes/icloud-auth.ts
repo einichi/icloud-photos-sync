@@ -20,7 +20,7 @@ export const UNAUTHORIZED: ErrorStruct = buildErrorStruct(
 );
 
 export const FORBIDDEN: ErrorStruct = buildErrorStruct(
-    name, prefix, `FORBIDDEN`, `Username does not seem to exist`,
+    name, prefix, `FORBIDDEN`, `iCloud rejected the authentication request`,
 );
 
 export const PRECONDITION_FAILED: ErrorStruct = buildErrorStruct(

@@ -54,7 +54,7 @@ describe(`API E2E Tests`, () => {
             instances.manager._resources.username = `test@apple.com`;
             instances.manager._resources.password = `somePassword`;
             const icloud = new iCloud();
-            await expect(icloud.authenticate()).rejects.toThrow(/^Username does not seem to exist$/);
+            await expect(icloud.authenticate()).rejects.toThrow(/^iCloud rejected the authentication request/);
             await expect(icloud.logout()).resolves.not.toThrow();
         });
 

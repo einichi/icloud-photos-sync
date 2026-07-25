@@ -72,6 +72,11 @@ export class HeaderJar {
         this.setHeader(new Header(`idmsa.apple.com`, `X-Apple-OAuth-Response-Type`, `code`));
         this.setHeader(new Header(`idmsa.apple.com`, `X-Apple-OAuth-Response-Mode`, `web_message`));
         this.setHeader(new Header(`idmsa.apple.com`, `X-Apple-OAuth-Client-Type`, `firstPartyAuth`));
+        this.setHeader(new Header(`idmsa.apple.com`, `X-Apple-OAuth-Redirect-URI`, `https://www.icloud.com`));
+        this.setHeader(new Header(`idmsa.apple.com`, `X-Apple-OAuth-Require-Grant-Code`, `true`));
+        this.setHeader(new Header(`idmsa.apple.com`, `X-Requested-With`, `XMLHttpRequest`));
+        this.setHeader(new Header(`idmsa.apple.com`, `X-Apple-Mandate-Security-Upgrade`, `0`));
+        this.setHeader(new Header(`idmsa.apple.com`, `X-Apple-I-Require-UE`, `true`));
 
         axios.interceptors.request.use(config => this._injectHeaders(config));
         axios.interceptors.response.use(response => this._extractHeaders(response));
@@ -290,6 +295,8 @@ export class NetworkManager {
         this._headerJar.clearHeader(HEADER_KEYS.SCNT);
         this._headerJar.clearHeader(HEADER_KEYS.SESSION_ID);
         this._headerJar.clearHeader(HEADER_KEYS.AUTH_ATTRIBUTES);
+        this._headerJar.clearHeader(HEADER_KEYS.OAUTH_STATE);
+        this._headerJar.clearHeader(HEADER_KEYS.FRAME_ID);
 
         await this.settleRateLimiter();
         await this.settleCCYLimiter();
@@ -381,6 +388,18 @@ export class NetworkManager {
     set sessionToken(sessionToken: string) {
         Resources.logger(this).debug(`Setting session secret with length ${sessionToken.length}`);
         Resources.manager().sessionSecret = sessionToken;
+    }
+
+    /**
+     * Applies the auth frame headers Apple uses to bind current web-auth requests together.
+     * @param frameId - The generated frame identifier for the active auth attempt
+     */
+    set authFrame(frameId: string) {
+        Resources.logger(this).debug(`Setting Apple auth frame ${frameId}`);
+        this._headerJar.setHeader(
+            new Header(`idmsa.apple.com`, HEADER_KEYS.OAUTH_STATE, frameId),
+            new Header(`idmsa.apple.com`, HEADER_KEYS.FRAME_ID, frameId),
+        );
     }
 
     /**

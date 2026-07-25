@@ -100,5 +100,10 @@ export const REQUEST_HEADER = {
         'X-Apple-OAuth-Response-Type': `code`,
         'X-Apple-OAuth-Response-Mode': `web_message`,
         'X-Apple-OAuth-Client-Type': `firstPartyAuth`,
+        'X-Apple-OAuth-Redirect-URI': `https://www.icloud.com`,
+        'X-Apple-OAuth-Require-Grant-Code': `true`,
+        'X-Requested-With': `XMLHttpRequest`,
+        'X-Apple-Mandate-Security-Upgrade': `0`,
+        'X-Apple-I-Require-UE': `true`,
     },
 };

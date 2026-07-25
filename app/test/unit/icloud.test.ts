@@ -248,9 +248,9 @@ describe.each([
         describe(`Authentication backend error`, () => {
             test.each([
                 {
-                    desc: `Unknown username`,
+                    desc: `Authentication rejected`,
                     status: 403,
-                    expectedError: /^Username does not seem to exist$/,
+                    expectedError: /^iCloud rejected the authentication request/,
                 }, {
                     desc: `Wrong username/password combination`,
                     status: 401,
@@ -339,14 +339,20 @@ describe.each([
                     .mockResolvedValue([`m1Proof`, `m2Proof`]);
 
                 mockedNetworkManager.mock
+                    .onGet(`https://idmsa.apple.com/appleauth/auth/authorize/signin`)
+                    .reply(200)
+                    .onPost(`https://idmsa.apple.com/appleauth/auth/federate`,
+                        {
+                            accountName: Config.defaultConfig.username,
+                            rememberMe: true,
+                        },
+                    )
+                    .reply(200)
                     .onPost(`https://idmsa.apple.com/appleauth/auth/signin/init`,
                         {
                             a: `clientEphemeral`,
                             accountName: Config.defaultConfig.username,
                             protocols: [`s2k`, `s2k_fo`],
-                        },
-                        {
-                            headers: Config.REQUEST_HEADER.AUTH,
                         },
                     )
                     .reply(200);
@@ -366,6 +372,7 @@ describe.each([
                     `https://idmsa.apple.com/appleauth/auth/signin/complete`,
                     {
                         accountName: Config.defaultConfig.username,
+                        rememberMe: true,
                         trustTokens: expectedTrustTokensArray,
                         m1: `m1Proof`,
                         m2: `m2Proof`,

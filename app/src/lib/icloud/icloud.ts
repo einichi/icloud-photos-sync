@@ -1,11 +1,12 @@
 import {AxiosError, AxiosRequestConfig} from 'axios';
+import {randomUUID} from 'crypto';
 import {jsonc} from 'jsonc';
 import pTimeout from 'p-timeout';
 import {AUTH_ERR, ICLOUD_PHOTOS_ERR, MFA_ERR} from '../../app/error/error-codes.js';
 import {iCPSError} from '../../app/error/error.js';
 import {iCPSEventCloud, iCPSEventMFA, iCPSEventPhotos, iCPSEventRuntimeWarning} from '../resources/events-types.js';
 import {Resources} from '../resources/main.js';
-import {COOKIE_KEYS, ENDPOINTS, TrustedPhoneNumber} from '../resources/network-types.js';
+import {CLIENT_ID, COOKIE_KEYS, ENDPOINTS, TrustedPhoneNumber} from '../resources/network-types.js';
 import {iCloudPhotos} from './icloud-photos/icloud-photos.js';
 import {iCloudCrypto} from './icloud.crypto.js';
 import {MFAMethod} from './mfa/mfa-method.js';
@@ -180,7 +181,10 @@ export class iCloud {
                     Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.UNAUTHORIZED).addCause(err));
                     break;
                 case 403:
-                    Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.FORBIDDEN).addCause(err));
+                    Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.FORBIDDEN)
+                        .addMessage(`Apple returned HTTP 403; this can mean invalid credentials, account security state, or a rejected web-auth request`)
+                        .addContext(`status`, status)
+                        .addCause(err));
                     break;
                 case 412:
                     Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.PRECONDITION_FAILED).addCause(err));
@@ -239,6 +243,11 @@ export class iCloud {
     async getSRPLogin(authenticator: iCloudCrypto = new iCloudCrypto()): Promise<[url: string, payload: any]> {
         Resources.logger(this).info(`Generating SRP challenge`);
         try {
+            const frameId = `auth-${randomUUID().toLowerCase()}`;
+            Resources.network().authFrame = frameId;
+            await this.initializeAuthSession(frameId);
+            await this.federateAuthSession();
+
             const initResponse = await Resources.network().post(ENDPOINTS.AUTH.BASE + ENDPOINTS.AUTH.PATH.SIGNIN.INIT, {
                 a: await authenticator.getClientEphemeral(),
                 accountName: Resources.manager().username,
@@ -257,6 +266,7 @@ export class iCloud {
                 ENDPOINTS.AUTH.BASE + ENDPOINTS.AUTH.PATH.SIGNIN.COMPLETE,
                 {
                     accountName: Resources.manager().username,
+                    rememberMe: true,
                     trustTokens: this.getTrustTokens(),
                     m1: m1Proof,
                     m2: m2Proof,
@@ -266,6 +276,55 @@ export class iCloud {
         } catch (err) {
             throw new iCPSError(AUTH_ERR.SRP_INIT_FAILED).addCause(err);
         }
+    }
+
+    /**
+     * Starts Apple's current web-auth SRP session.
+     * @param frameId - Auth frame used to bind Apple web-auth requests together
+     */
+    async initializeAuthSession(frameId: string): Promise<void> {
+        Resources.logger(this).debug(`Initializing Apple SRP auth session`);
+        await Resources.network().get(
+            ENDPOINTS.AUTH.BASE + ENDPOINTS.AUTH.PATH.SIGNIN.AUTHORIZE,
+            {
+                headers: {
+                    Accept: `*/*`,
+                },
+                params: {
+                    frame_id: frameId,
+                    language: `en_US`,
+                    skVersion: `7`,
+                    iframeId: frameId,
+                    client_id: CLIENT_ID,
+                    redirect_uri: `https://www.icloud.com`,
+                    response_type: `code`,
+                    response_mode: `web_message`,
+                    state: frameId,
+                    authVersion: `latest`,
+                },
+                validateStatus: status => status === 200,
+            },
+        );
+    }
+
+    /**
+     * Submits the account name to Apple's federate endpoint before SRP init.
+     */
+    async federateAuthSession(): Promise<void> {
+        Resources.logger(this).debug(`Federating Apple SRP auth session`);
+        await Resources.network().post(
+            ENDPOINTS.AUTH.BASE + ENDPOINTS.AUTH.PATH.SIGNIN.FEDERATE,
+            {
+                accountName: Resources.manager().username,
+                rememberMe: true,
+            },
+            {
+                params: {
+                    isRememberMeEnabled: `true`,
+                },
+                validateStatus: status => status === 200,
+            },
+        );
     }
 
     async getTrustedPhoneNumbers(): Promise<TrustedPhoneNumber[]> {
