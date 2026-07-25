@@ -11,9 +11,9 @@ import {Resources} from "./main.js";
 export const CLIENT_ID = `d39ba9916b7251055b22c7f910e2ea796ee65e98b2ddecea8f5dde8d9d1a815d`;
 
 /**
- * User Agent this CLI is using. Emulating a Firefox Browser
+ * User Agent this CLI is using. Emulating the Safari version used by current iCloud web-auth clients.
  */
-export const USER_AGENT = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36`;
+export const USER_AGENT = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3.1 Safari/605.1.15`;
 
 /**
  * Client information shared with the iCloud backend based on the user agent
@@ -21,7 +21,7 @@ export const USER_AGENT = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Apple
 export const CLIENT_INFO = jsonc.stringify({
     U: USER_AGENT,
     L: `en-US`,
-    Z: `GMT+01:00`,
+    Z: `GMT-05:00`,
     V: `1.1`,
     F: ``,
 });

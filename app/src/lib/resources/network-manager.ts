@@ -14,6 +14,8 @@ import {Resources} from "./main.js";
 import {CLIENT_ID, CLIENT_INFO, COOKIE_KEYS, ENDPOINTS, HEADER_KEYS, PhotosSetupResponseZone, SetupResponse, SigninResponse, TrustResponse, USER_AGENT} from "./network-types.js";
 import {PhotosAccountZone, ZoneArea} from "./resource-types.js";
 
+const AXIOS_DEFAULT_ACCEPT_HEADER = `application/json, text/plain, */*`;
+
 /**
  * Object holding all necessary information for a specific header value, that needs to be reused across multiple requests
  */
@@ -100,6 +102,12 @@ export class HeaderJar {
         Array.from(this.headers.values())
             .filter(cookie => this.isApplicable(config, cookie))
             .forEach(header => {
+                if (header.key === `Accept`
+                    && config.headers[header.key] !== undefined
+                    && config.headers[header.key] !== AXIOS_DEFAULT_ACCEPT_HEADER) {
+                    return;
+                }
+
                 config.headers[header.key] = header.value;
             });
 

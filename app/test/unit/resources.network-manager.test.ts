@@ -182,6 +182,26 @@ describe(`HeaderJar`, () => {
                 });
             });
         });
+
+        test(`Preserves explicit request headers over shared defaults`, () => {
+            const axiosInstance = axios.create();
+            const headerJar = new HeaderJar(axiosInstance);
+            headerJar.headers.clear();
+            headerJar.cookies.clear();
+
+            headerJar.setHeader(new Header(``, `Accept`, `application/json`));
+
+            const injectedRequestConfig = headerJar._injectHeaders({
+                url: `https://icloud.com/`,
+                headers: {
+                    Accept: `*/*`,
+                },
+            } as any);
+
+            expect(injectedRequestConfig.headers).toEqual({
+                Accept: `*/*`,
+            });
+        });
     });
 
     describe(`Extract headers`, () => {

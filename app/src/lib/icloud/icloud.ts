@@ -183,6 +183,7 @@ export class iCloud {
                 case 403:
                     Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.FORBIDDEN)
                         .addMessage(`Apple returned HTTP 403; this can mean invalid credentials, account security state, or a rejected web-auth request`)
+                        .addMessage(`Rejected endpoint: ${this.describeAxiosRequest(err as AxiosError)}`)
                         .addContext(`status`, status)
                         .addCause(err));
                     break;
@@ -204,6 +205,15 @@ export class iCloud {
             // Return in finally is required because control flow of try/catch block is complicated
             // eslint-disable-next-line no-unsafe-finally
             return ready;
+        }
+    }
+
+    private describeAxiosRequest(err: AxiosError): string {
+        try {
+            const requestUrl = new URL(err.config?.url ?? ``, err.config?.baseURL);
+            return `${err.config?.method?.toUpperCase() ?? `UNKNOWN`} ${requestUrl.pathname}`;
+        } catch {
+            return `${err.config?.method?.toUpperCase() ?? `UNKNOWN`} unknown`;
         }
     }
 
