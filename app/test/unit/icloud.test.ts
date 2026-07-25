@@ -832,7 +832,7 @@ describe.each([
                     mockedNetworkManager.sessionId = Config.iCloudAuthSecrets.sessionSecret;
 
                     mockedNetworkManager.mock
-                        .onPost(endpoint,
+                        .onPut(endpoint,
                             payload,
                             {
                                 headers: {
@@ -861,7 +861,7 @@ describe.each([
                     mockedNetworkManager.sessionId = Config.iCloudAuthSecrets.sessionSecret;
 
                     mockedNetworkManager.mock
-                        .onPost(endpoint,
+                        .onPut(endpoint,
                             payload,
                             {
                                 headers: {
@@ -887,7 +887,7 @@ describe.each([
                     mockedNetworkManager.sessionId = Config.iCloudAuthSecrets.sessionSecret;
 
                     mockedNetworkManager.mock
-                        .onPost(endpoint,
+                        .onPut(endpoint,
                             payload,
                             {
                                 headers: {
@@ -944,7 +944,7 @@ describe.each([
                     mockedNetworkManager.sessionId = Config.iCloudAuthSecrets.sessionSecret;
 
                     mockedNetworkManager.mock
-                        .onPost(endpoint,
+                        .onPut(endpoint,
                             payload,
                             {
                                 headers: {

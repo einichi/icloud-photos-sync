@@ -559,7 +559,7 @@ export class iCloud {
             const data = method.getEnterPayload(mfa);
 
             Resources.logger(this).debug(`Entering MFA code via URL ${url} with redacted payload`);
-            await Resources.network().post(url, data, config);
+            await Resources.network().put(url, data, config);
 
             Resources.logger(this).info(`MFA code correct!`);
             Resources.emit(iCPSEventCloud.AUTHENTICATED);
@@ -579,6 +579,7 @@ export class iCloud {
                 this.clearMFATimeout();
                 Resources.emit(iCPSEventCloud.ERROR, new iCPSError(MFA_ERR.CHALLENGE_MISMATCH)
                     .addMessage(`Start a new authentication request and enter the newest MFA code`)
+                    .addMessage(`Submitted endpoint: ${this.describeAxiosRequest(err as AxiosError)}`)
                     .addContext(`mfaMethod`, method.toString())
                     .addCause(err));
                 return;
