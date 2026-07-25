@@ -3,6 +3,8 @@
  * Additionally the refreshState() function will be executed through an interval.
  */
 export const stateViewScript = (basePath: string) => `
+let previousErrorText = "";
+
 async function triggerSync() {
     const response = await fetch("${basePath}/api/sync", { method: "POST" });
     if (!response.ok) {
@@ -49,6 +51,40 @@ async function submitCredentials(event) {
     await refreshState()
 }
 
+async function copyPreviousError() {
+    if (!previousErrorText) {
+        return;
+    }
+
+    const button = document.getElementById('copy-error-button');
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(previousErrorText);
+        } else {
+            const textArea = document.createElement('textarea');
+            textArea.value = previousErrorText;
+            textArea.setAttribute('readonly', '');
+            textArea.style.position = 'fixed';
+            textArea.style.top = '-1000px';
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+        }
+
+        if (button) {
+            button.classList.add('copied');
+            button.title = 'Copied error message';
+            setTimeout(() => {
+                button.classList.remove('copied');
+                button.title = 'Copy error message';
+            }, 1500);
+        }
+    } catch (err) {
+        alert('Unable to copy error message: ' + err.message);
+    }
+}
+
 async function refreshState() {
     const state = await fetchState()
     resetState()
@@ -86,6 +122,16 @@ function setStateText(text) {
     document.querySelector("#state-text").innerHTML = text
 }
 
+function setCopyableErrorText(text) {
+    const button = document.getElementById('copy-error-button');
+    previousErrorText = text ?? "";
+    if (button) {
+        button.style.display = previousErrorText ? "inline-flex" : "none";
+        button.classList.remove('copied');
+        button.title = 'Copy error message';
+    }
+}
+
 function escapeHtml(text) {
     const el = document.createElement("span");
     el.textContent = text ?? "";
@@ -107,6 +153,13 @@ function formatReadyFailureText(state) {
         formatDate(state.timestamp) +
         "<br/><br/>" +
         formatInlineError(state.prevError.message);
+}
+
+function getReadyFailurePlainText(state) {
+    return "Last " + (state.prevTrigger ?? "operation") + " failed at\\n" +
+        formatDate(state.timestamp) +
+        "\\n\\n" +
+        state.prevError.message;
 }
 
 function formatReadySuccessText(state) {
@@ -210,6 +263,7 @@ function enableSymbol(symbolName) {
  */
 function resetState() {
     setStateText('...')
+    setCopyableErrorText("")
     setProgress()
     document.querySelectorAll(".state-symbol").forEach((el) => {
         el.style.display = "none";
@@ -254,6 +308,7 @@ function updateState(state) {
 
             // If there was an error reported, show it
             if(state.prevError) {
+                setCopyableErrorText(getReadyFailurePlainText(state))
                 setStateText(formatReadyFailureText(state))
                 enableSymbol('error')
                 return

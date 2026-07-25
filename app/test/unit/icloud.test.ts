@@ -299,10 +299,52 @@ describe.each([
             expect(errorEvent).toHaveBeenCalledTimes(1);
             expect(legacy ? icloud.getLegacyLogin : icloud.getSRPLogin).toHaveBeenCalled();
         });
-    });
+	    });
 
-    describe.each([{
-        desc: `with trust token`,
+	    test(`SRP auth retries once without stored trust token when signin complete rejects it`, async () => {
+	        mockedResourceManager._resources.legacyLogin = false;
+	        mockedResourceManager._readResourceFile.mockReturnValue({
+	            libraryVersion: 1,
+	            trustToken: Config.trustToken,
+	        });
+	        icloud.getReady = jest.fn<typeof icloud.getReady>().mockResolvedValue(true);
+	        icloud.getTrustedPhoneNumbers = jest.fn<typeof icloud.getTrustedPhoneNumbers>().mockResolvedValue([]);
+	        icloud.requestTrustedDeviceMFA = jest.fn<typeof icloud.requestTrustedDeviceMFA>().mockResolvedValue();
+
+	        const authenticationUrl = `https://idmsa.apple.com/appleauth/auth/signin/complete`;
+	        const firstPayload = {
+	            accountName: Config.defaultConfig.username,
+	            trustTokens: [Config.trustToken],
+	        };
+	        const retryPayload = {
+	            accountName: Config.defaultConfig.username,
+	            trustTokens: [],
+	        };
+	        icloud.getSRPLogin = jest.fn<typeof icloud.getSRPLogin>()
+	            .mockResolvedValueOnce([authenticationUrl, firstPayload])
+	            .mockResolvedValueOnce([authenticationUrl, retryPayload]);
+	        mockedValidator.validateSigninResponse = jest.fn<typeof mockedValidator.validateSigninResponse>();
+	        mockedNetworkManager.applySigninResponse = jest.fn<typeof mockedNetworkManager.applySigninResponse>();
+
+	        mockedNetworkManager.mock
+	            .onPost(authenticationUrl, firstPayload, {headers: Config.REQUEST_HEADER.AUTH})
+	            .reply(403)
+	            .onPost(authenticationUrl, retryPayload, {headers: Config.REQUEST_HEADER.AUTH})
+	            .reply(409);
+
+	        const mfaEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.MFA_REQUIRED);
+	        const errorEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.ERROR);
+
+	        await icloud.authenticate();
+
+	        expect(icloud.getSRPLogin).toHaveBeenNthCalledWith(1, undefined, true);
+	        expect(icloud.getSRPLogin).toHaveBeenNthCalledWith(2, undefined, false);
+	        expect(mfaEvent).toHaveBeenCalledWith([]);
+	        expect(errorEvent).not.toHaveBeenCalled();
+	    });
+
+	    describe.each([{
+	        desc: `with trust token`,
         trustTokenResourceFile: Config.trustToken,
         expectedTrustTokensArray: [Config.trustToken],
     }, {

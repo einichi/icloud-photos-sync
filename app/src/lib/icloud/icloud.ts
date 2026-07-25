@@ -36,6 +36,11 @@ export class iCloud {
     private hasCurrentAuthenticationTrustToken = false;
 
     /**
+     * Whether the active authentication attempt had to retry without a stored trust token.
+     */
+    private retriedAuthenticationWithoutTrustToken = false;
+
+    /**
      * Creates a new iCloud Object
      * @param ignoreFailOnMfa - If set to true, the authentication will still continue even if MFA is required and the failOnMfa flag is set
      * @emits iCPSEventCloud.ERROR - If the MFA code is required and the failOnMfa flag is set - the iCPSError is provided as argument
@@ -137,11 +142,18 @@ export class iCloud {
         };
 
         try {
-            const [url, data] = Resources.manager().legacyLogin
-                ? this.getLegacyLogin()
-                : await this.getSRPLogin();
+            let response;
+            try {
+                response = await this.performSignin(config);
+            } catch (err) {
+                if (!this.shouldRetrySigninWithoutTrustToken(err, trustToken)) {
+                    throw err;
+                }
 
-            const response = await Resources.network().post(url, data, config);
+                this.retriedAuthenticationWithoutTrustToken = true;
+                Resources.logger(this).warn(`iCloud rejected SRP sign-in with stored trust token; retrying once without the stored trust token`);
+                response = await this.performSignin(config, false);
+            }
 
             const validatedResponse = Resources.validator().validateSigninResponse(response);
             Resources.network().applySigninResponse(validatedResponse);
@@ -184,6 +196,8 @@ export class iCloud {
                     Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.FORBIDDEN)
                         .addMessage(`Apple returned HTTP 403; this can mean invalid credentials, account security state, or a rejected web-auth request`)
                         .addMessage(`Rejected endpoint: ${this.describeAxiosRequest(err as AxiosError)}`)
+                        .addMessage(`Response body: ${this.describeAxiosResponseData(err as AxiosError)}`)
+                        .addMessage(this.retriedAuthenticationWithoutTrustToken ? `Stored trust token retry: failed without stored trust token` : `Stored trust token retry: not attempted`)
                         .addContext(`status`, status)
                         .addCause(err));
                     break;
@@ -202,10 +216,27 @@ export class iCloud {
         } finally {
             this.currentAuthenticationTrustToken = undefined;
             this.hasCurrentAuthenticationTrustToken = false;
+            this.retriedAuthenticationWithoutTrustToken = false;
             // Return in finally is required because control flow of try/catch block is complicated
             // eslint-disable-next-line no-unsafe-finally
             return ready;
         }
+    }
+
+    private async performSignin(config: AxiosRequestConfig, includeTrustToken: boolean = true) {
+        const [url, data] = Resources.manager().legacyLogin
+            ? this.getLegacyLogin(includeTrustToken)
+            : await this.getSRPLogin(undefined, includeTrustToken);
+
+        return Resources.network().post(url, data, config);
+    }
+
+    private shouldRetrySigninWithoutTrustToken(err: unknown, trustToken?: string): boolean {
+        return !!trustToken
+            && !Resources.manager().legacyLogin
+            && (err as AxiosError).isAxiosError
+            && (err as AxiosError).response?.status === 403
+            && this.describeAxiosRequest(err as AxiosError) === `POST /appleauth/auth/signin/complete`;
     }
 
     private describeAxiosRequest(err: AxiosError): string {
@@ -217,11 +248,34 @@ export class iCloud {
         }
     }
 
+    private describeAxiosResponseData(err: AxiosError): string {
+        const data = err.response?.data;
+        if (!data) {
+            return `none`;
+        }
+
+        if (typeof data === `string`) {
+            return `text length ${data.length}`;
+        }
+
+        if (typeof data === `object`) {
+            const keys = Object.keys(data).sort();
+            return keys.length === 0 ? `object with no keys` : `object keys: ${keys.join(`, `)}`;
+        }
+
+        return typeof data;
+    }
+
     /**
      * Gets the stored trust token as an auth payload array.
      * @returns An array containing the trust token if present, otherwise an empty array
      */
-    private getTrustTokens(): string[] {
+    private getTrustTokens(includeTrustToken: boolean = true): string[] {
+        if (!includeTrustToken) {
+            Resources.logger(this).info(`Authentication payload will not include stored iCloud trust token for retry`);
+            return [];
+        }
+
         const trustToken = this.hasCurrentAuthenticationTrustToken
             ? this.currentAuthenticationTrustToken
             : Resources.manager().trustToken;
@@ -233,14 +287,14 @@ export class iCloud {
      * Generates the legacy plain-text login payload and url
      * @returns A tuple containing the url and payload required for the legacy login method
      */
-    getLegacyLogin(): [url: string, payload: any] {
+    getLegacyLogin(includeTrustToken: boolean = true): [url: string, payload: any] {
         Resources.logger(this).info(`Generating plain text login payload`);
         return [
             ENDPOINTS.AUTH.BASE + ENDPOINTS.AUTH.PATH.SIGNIN.LEGACY,
             {
                 accountName: Resources.manager().username,
                 password: Resources.manager().password,
-                trustTokens: this.getTrustTokens(),
+                trustTokens: this.getTrustTokens(includeTrustToken),
             },
         ];
     }
@@ -250,7 +304,7 @@ export class iCloud {
      * @param authenticator - The authenticator crypto instance for generating the SRP proof - parameterized for testing purposes, will be initiated by default
      * @returns A tuple containing the url and payload required for the SRP login method
      */
-    async getSRPLogin(authenticator: iCloudCrypto = new iCloudCrypto()): Promise<[url: string, payload: any]> {
+    async getSRPLogin(authenticator: iCloudCrypto = new iCloudCrypto(), includeTrustToken: boolean = true): Promise<[url: string, payload: any]> {
         Resources.logger(this).info(`Generating SRP challenge`);
         try {
             const frameId = `auth-${randomUUID().toLowerCase()}`;
@@ -277,7 +331,7 @@ export class iCloud {
                 {
                     accountName: Resources.manager().username,
                     rememberMe: true,
-                    trustTokens: this.getTrustTokens(),
+                    trustTokens: this.getTrustTokens(includeTrustToken),
                     m1: m1Proof,
                     m2: m2Proof,
                     c: validatedInitResponse.data.c,

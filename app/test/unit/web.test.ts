@@ -1187,10 +1187,17 @@ describe.each([
             })
 
             test(`Handle 'ready' state with previous error triggered by sync`, async () => {
+                const writeText = jest.fn<UnknownAsyncFunction>().mockResolvedValue(undefined);
                 mockedEventManager.emit(iCPSEventApp.SCHEDULED_START)
                 mockedEventManager.emit(iCPSEventRuntimeError.SCHEDULED_ERROR, new Error(`test`))
                 mockedState.timestamp = 1000
                 await site.load(`${webBasePath}/state`)
+                Object.defineProperty(site.dom.window.navigator, `clipboard`, {
+                    configurable: true,
+                    value: {
+                        writeText,
+                    },
+                });
 
                 await site.dom.window.refreshState()
 
@@ -1206,6 +1213,10 @@ describe.each([
 
                 expect(getByTestId(site.body, `state-text`)).toBeVisible();
                 expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Last sync failed at${formattedTestDate(new Date(1000))}UNKNOWN: Unknown error occurred caused by test`);
+                expect(getByTestId(site.body, `copy-error-button`)).toBeVisible();
+
+                await site.dom.window.copyPreviousError();
+                expect(writeText).toHaveBeenCalledWith(`Last sync failed at\n${formattedTestDate(new Date(1000))}\n\nUNKNOWN: Unknown error occurred caused by test`);
 
                 expect(getByTestId(site.body, `progress-bar`)).not.toBeVisible();
 
@@ -1247,6 +1258,7 @@ describe.each([
 
                 expect(getByTestId(site.body, `state-text`)).toBeVisible();
                 expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Last auth failed at${formattedTestDate(new Date(1000))}UNKNOWN: Unknown error occurred caused by test`);
+                expect(getByTestId(site.body, `copy-error-button`)).toBeVisible();
 
                 expect(getByTestId(site.body, `progress-bar`)).not.toBeVisible();
 
@@ -1268,6 +1280,7 @@ describe.each([
                 expect(getByTestId(site.body, `ok-symbol`)).toBeVisible();
                 expect(getByTestId(site.body, `error-symbol`)).not.toBeVisible();
                 expect(getByTestId(site.body, `running-symbol`)).not.toBeVisible();
+                expect(getByTestId(site.body, `copy-error-button`)).not.toBeVisible();
 
                 expect(getByTestId(site.body, `sync-button`)).toBeVisible();
                 expect(getByTestId(site.body, `reauth-button`)).toBeVisible();

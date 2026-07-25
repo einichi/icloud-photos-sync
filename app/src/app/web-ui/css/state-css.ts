@@ -34,6 +34,24 @@ export const stateViewCSS = `
     margin-top: 1rem;
     margin-bottom: 1rem;
 }
+.copy-error-button {
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+    padding: 0;
+    margin: -0.35rem auto 0.75rem;
+}
+.copy-error-button svg {
+    width: 1rem;
+    height: 1rem;
+    fill: currentColor;
+}
+.copy-error-button.copied {
+    background-color: #6BBE66;
+    border-color: #6BBE66;
+}
 .progress-detail {
     display: block;
     margin-top: 0.35rem;

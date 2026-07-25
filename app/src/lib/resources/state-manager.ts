@@ -613,9 +613,6 @@ export class StateManager {
             case AUTH_ERR.UNAUTHORIZED.code:
                 error.message = `Your credentials seem to be invalid. Please check your iCloud credentials and try again.`;
                 break;
-            case AUTH_ERR.FORBIDDEN.code:
-                error.message = `iCloud rejected the authentication request. Check your iCloud credentials and Apple Account security prompts, then try renewing authentication again.`;
-                break;
             case WEB_SERVER_ERR.MFA_CODE_NOT_PROVIDED.code:
                 error.message = `MFA code not provided within timeout period. Use the 'Renew Authentication' button to request and enter a new code.`;
                 break;
