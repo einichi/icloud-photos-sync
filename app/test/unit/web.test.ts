@@ -465,6 +465,7 @@ describe.each([
         describe(`Pre-Conditions met`, () => {
             test(`Should handle reauth request`, async () => {
                 webServer.triggerReauth = jest.fn<typeof webServer.triggerReauth>().mockResolvedValue(``)
+                mockedResourceManager._resources.trustToken = `staleTrustToken`;
                 const reauthEvent = mockedEventManager.spyOnEvent(iCPSEventWebServer.REAUTH_REQUESTED)
                 const req = createRequest<IncomingMessage>({
                     method: `POST`,
@@ -479,6 +480,7 @@ describe.each([
                 });
                 expect(webServer.triggerReauth).toHaveBeenCalled()
                 expect(reauthEvent).toHaveBeenCalled()
+                expect(mockedResourceManager._resources.trustToken).toBeUndefined();
             })
 
             test(`Should handle reauth error`, async () => {
@@ -582,6 +584,25 @@ describe.each([
             expect(mockedResourceManager._writeResourceFile).toHaveBeenCalledTimes(0);
             expect(webServer.triggerReauth).toHaveBeenCalled();
             expect(reauthEvent).toHaveBeenCalled();
+        })
+
+        test(`Clears stale trust token before authenticating with submitted credentials`, async () => {
+            mockedResourceManager._resources.trustToken = `staleTrustToken`;
+            const req = createRequest<IncomingMessage>({
+                method: `POST`,
+                url: `${webBasePath}/api/credentials`,
+                data: JSON.stringify({
+                    username: `web@icloud.com`,
+                    password: `webPass`,
+                })
+            })
+
+            const res = await sendMockedRequest(webServer, req)
+
+            expect(res._getStatusCode()).toBe(200);
+            expect(mockedResourceManager._resources.trustToken).toBeUndefined();
+            expect(mockedResourceManager._writeResourceFile).toHaveBeenCalled();
+            expect(webServer.triggerReauth).toHaveBeenCalled();
         })
 
         test(`Rejects invalid credential payload`, async () => {
@@ -1540,9 +1561,9 @@ describe.each([
                     getByTestId(site.body, `submitButton`).click()
 
                     expect(site.mockedFunctions.navigate).not.toHaveBeenCalled()
-                    expect(site.mockedFunctions.alert).toHaveBeenCalledWith(`MFA submission failed: undefined`)
-                    expect(getByTestId(site.body, `submitButton`)).not.toBeEnabled()
-                    expect(getByTestId(site.body, `submitButton`).style.backgroundColor).toEqual(`rgb(147, 157, 179)`)
+                    expect(site.mockedFunctions.alert).toHaveBeenCalledWith(`MFA submission failed: test`)
+                    expect(getByTestId(site.body, `submitButton`)).toBeEnabled()
+                    expect(getByTestId(site.body, `submitButton`).style.backgroundColor).toEqual(``)
                 })
 
                 test(`navigates to resend mfa ui`, async () => {

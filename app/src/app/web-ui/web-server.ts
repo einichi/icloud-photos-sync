@@ -484,6 +484,7 @@ export class WebServer {
         }
 
         Resources.emit(iCPSEventWebServer.REAUTH_REQUESTED);
+        this.clearStoredTrustTokenForReauth();
         this.triggerReauth()
             .catch(err => {
                 Resources.emit(iCPSEventWebServer.REAUTH_ERROR, iCPSError.toiCPSError(err));
@@ -517,6 +518,7 @@ export class WebServer {
         }
 
         Resources.emit(iCPSEventWebServer.REAUTH_REQUESTED);
+        this.clearStoredTrustTokenForReauth();
 
         this.triggerReauth()
             .catch(err => {
@@ -541,6 +543,18 @@ export class WebServer {
      */
     triggerReauth(app: TokenApp = new TokenApp()): Promise<unknown> {
         return app.run()
+    }
+
+    /**
+     * Clears the persisted trust token before an explicit user-requested renewal.
+     */
+    private clearStoredTrustTokenForReauth(): void {
+        if (!Resources.manager().trustToken) {
+            return;
+        }
+
+        Resources.logger(this).info(`Clearing stored iCloud trust token before explicit authentication renewal`);
+        Resources.manager().trustToken = undefined;
     }
 
     /**

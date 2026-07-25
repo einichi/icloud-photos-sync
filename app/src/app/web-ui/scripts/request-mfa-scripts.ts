@@ -44,7 +44,7 @@ async function requestMfaWithMethod(method, id) {
         navigate('${basePath}/submit-mfa');
     } catch (e) {
         alert('Failed to request MFA code: ' + e.message);
+        navigate('${basePath}/state');
     }
-    navigate('${basePath}/state');
 }
 `

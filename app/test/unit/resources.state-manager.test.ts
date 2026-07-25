@@ -505,6 +505,17 @@ describe(`State changes`, () => {
                 progressMsg: `Starting auth...`
             } as SerializedState
         },{
+            desc: `Should set custom error on mfa challenge mismatch`,
+            events: [iCPSEventWebServer.REAUTH_REQUESTED, [iCPSEventWebServer.REAUTH_ERROR, new iCPSError(MFA_ERR.CHALLENGE_MISMATCH)]],
+            serializedState: {
+                state: `ready`,
+                nextSync: undefined,
+                prevError: {code: `MFA_CHALLENGE_MISMATCH`, message: `The MFA code no longer matches Apple's active authentication challenge. Use the 'Renew Authentication' button to request a new code, then enter the newest code.`},
+                prevTrigger: `auth`,
+                progress: 0,
+                progressMsg: `Starting auth...`
+            } as SerializedState
+        },{
             desc: `Should set custom error on unauthorized error`,
             events: [iCPSEventWebServer.REAUTH_REQUESTED, [iCPSEventWebServer.REAUTH_ERROR, new iCPSError(AUTH_ERR.UNAUTHORIZED)]],
             serializedState: {

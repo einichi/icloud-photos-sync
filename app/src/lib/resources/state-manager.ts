@@ -616,6 +616,9 @@ export class StateManager {
             case WEB_SERVER_ERR.MFA_CODE_NOT_PROVIDED.code:
                 error.message = `MFA code not provided within timeout period. Use the 'Renew Authentication' button to request and enter a new code.`;
                 break;
+            case MFA_ERR.CHALLENGE_MISMATCH.code:
+                error.message = `The MFA code no longer matches Apple's active authentication challenge. Use the 'Renew Authentication' button to request a new code, then enter the newest code.`;
+                break;
             }
         }
 

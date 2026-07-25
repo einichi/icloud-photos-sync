@@ -730,6 +730,32 @@ describe.each([
                     expect(icloud.mfaTimeout).toBeDefined()
                 });
 
+                test(`Challenge mismatch`, async () => {
+                    const iCloudReady = icloud.getReady();
+                    mockedNetworkManager._headerJar.setCookie(Config.aaspCookieString);
+                    mockedNetworkManager._headerJar.setHeader(new Header(`idmsa.apple.com`, `scnt`, Config.iCloudAuthSecrets.scnt));
+                    mockedNetworkManager.sessionId = Config.iCloudAuthSecrets.sessionSecret;
+
+                    mockedNetworkManager.mock
+                        .onPost(endpoint,
+                            payload,
+                            {
+                                headers: {
+                                    ...Config.REQUEST_HEADER.AUTH,
+                                    scnt: Config.iCloudAuthSecrets.scnt,
+                                    Cookie: `aasp=${Config.iCloudAuthSecrets.aasp}`,
+                                    'X-Apple-ID-Session-Id': Config.iCloudAuthSecrets.sessionSecret,
+                                },
+                            },
+                        )
+                        .reply(409);
+
+                    await icloud.submitMFA(new MFAMethod(method as any), `123456`);
+
+                    await expect(iCloudReady).rejects.toThrow(/^MFA code no longer matches the active Apple authentication challenge/);
+                    expect(icloud.mfaTimeout).toBeUndefined()
+                });
+
                 test.each([{
                     replyPayload: {
                         service_errors: [  

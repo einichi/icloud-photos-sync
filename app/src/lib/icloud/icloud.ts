@@ -336,11 +336,7 @@ export class iCloud {
 
             Resources.logger(this).info(`MFA code correct!`);
             Resources.emit(iCPSEventCloud.AUTHENTICATED);
-
-            if (this.mfaTimeout) {
-                clearTimeout(this.mfaTimeout);
-                this.mfaTimeout = undefined
-            }
+            this.clearMFATimeout();
         } catch (err) {
             if (err.response?.status === 400) {
                 const augmentedErr = new iCPSError(MFA_ERR.CODE_REJECTED).addCause(err);
@@ -352,8 +348,29 @@ export class iCloud {
                 return;
             }
 
+            if (err.response?.status === 409) {
+                this.clearMFATimeout();
+                Resources.emit(iCPSEventCloud.ERROR, new iCPSError(MFA_ERR.CHALLENGE_MISMATCH)
+                    .addMessage(`Start a new authentication request and enter the newest MFA code`)
+                    .addContext(`mfaMethod`, method.toString())
+                    .addCause(err));
+                return;
+            }
+
             Resources.emit(iCPSEventCloud.ERROR, new iCPSError(MFA_ERR.SUBMIT_FAILED).addCause(err));
         }
+    }
+
+    /**
+     * Clears the active MFA timeout after the MFA challenge has reached a terminal state.
+     */
+    private clearMFATimeout(): void {
+        if (!this.mfaTimeout) {
+            return;
+        }
+
+        clearTimeout(this.mfaTimeout);
+        this.mfaTimeout = undefined;
     }
 
     /**

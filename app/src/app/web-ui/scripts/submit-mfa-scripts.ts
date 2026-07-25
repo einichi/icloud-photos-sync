@@ -12,13 +12,15 @@ async function submitMfa() {
     try {
         const response = await fetch("${basePath}/api/mfa?code=" + mfaCode, {method: "POST"});
         if (!response.ok) {
-            const body = response.json()
+            const body = await response.json()
             throw new Error(body?.message ?? response.statusText);
         }
+        setTimeout(() => navigate("${basePath}/state"), 2000);
     } catch (err) {
-        alert("MFA submission failed: " + err.msg)
+        alert("MFA submission failed: " + err.message)
+        document.querySelector("#submitButton").disabled = false
+        document.querySelector("#submitButton").style['background-color'] = ""
     }
-    setTimeout(() => navigate("${basePath}/state"), 2000);
 }
 
 const mfaInputs = document.querySelectorAll("#mfaInput input");

@@ -23,6 +23,10 @@ export const CODE_REJECTED: ErrorStruct = buildErrorStruct(
     name, prefix, `CODE_REJECTED`, `MFA code rejected`,
 );
 
+export const CHALLENGE_MISMATCH: ErrorStruct = buildErrorStruct(
+    name, prefix, `CHALLENGE_MISMATCH`, `MFA code no longer matches the active Apple authentication challenge`,
+);
+
 export const RESEND_FAILED: ErrorStruct = buildErrorStruct(
     name, prefix, `RESEND_FAILED`, `Unable to resend MFA code`,
 );
