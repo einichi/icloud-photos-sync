@@ -306,6 +306,27 @@ describe.each([
                 expect(description).not.toContain(`token=secret`);
                 expect(description).not.toContain(`do-not-log`);
             });
+
+            test(`Locked account authentication rejection keeps Apple's recovery URL visible`, async () => {
+                mockedNetworkManager.mock
+                    .onPost(authenticationUrl, authenticationPayload, {headers: Config.REQUEST_HEADER.AUTH})
+                    .reply(403, {
+                        serviceErrors: [{
+                            code: `-20209`,
+                            message: `This Apple Account has been locked for security reasons. Visit iForgot to reset your account (https://iforgot.apple.com/password/verify/appleid)`,
+                        }],
+                    });
+
+                const errorEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.ERROR, false);
+
+                await expect(icloud.authenticate()).rejects.toThrow(/^iCloud rejected the authentication request/);
+
+                const authError = errorEvent.mock.calls[0][0] as iCPSError;
+                const description = authError.getDescription();
+
+                expect(description).toContain(`code=-20209 message=This Apple Account has been locked for security reasons. Visit iForgot to reset your account (https://iforgot.apple.com/password/verify/appleid)`);
+                expect(description).not.toContain(`[redacted-url]`);
+            });
         });
 
         test(`Unknown authentication error`, async () => {

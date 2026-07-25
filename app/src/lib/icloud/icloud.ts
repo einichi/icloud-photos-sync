@@ -15,6 +15,8 @@ import {MFAMethod} from './mfa/mfa-method.js';
  * This class holds the iCloud connection
  */
 export class iCloud {
+    private static readonly LOCKED_ACCOUNT_SERVICE_ERROR_CODE = `-20209`;
+
     /**
      * Access to the iCloud Photos service
      */
@@ -288,15 +290,20 @@ export class iCloud {
             return `#${index + 1} ${typeof serviceError}`;
         }
 
+        const allowUrls = this.isLockedAccountServiceError(serviceError);
         const fields = [`#${index + 1}`];
         for (const key of [`code`, `errorCode`, `reason`, `title`, `message`, `errorMessage`]) {
             const value = serviceError[key];
             if ([`string`, `number`, `boolean`].includes(typeof value)) {
-                fields.push(`${key}=${this.sanitizeDiagnosticText(String(value))}`);
+                fields.push(`${key}=${this.sanitizeDiagnosticText(String(value), allowUrls)}`);
             }
         }
 
         return fields.join(` `);
+    }
+
+    private isLockedAccountServiceError(serviceError: Record<string, unknown>): boolean {
+        return String(serviceError.code ?? serviceError.errorCode ?? ``) === iCloud.LOCKED_ACCOUNT_SERVICE_ERROR_CODE;
     }
 
     private getRecordField(record: object, key: string): unknown {
@@ -307,10 +314,11 @@ export class iCloud {
         return typeof value === `object` && value !== null && !Array.isArray(value);
     }
 
-    private sanitizeDiagnosticText(value: string): string {
-        return value
-            .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, `[redacted-email]`)
-            .replace(/https?:\/\/\S+/gi, `[redacted-url]`)
+    private sanitizeDiagnosticText(value: string, allowUrls: boolean = false): string {
+        const redactedValue = value
+            .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, `[redacted-email]`);
+
+        return (allowUrls ? redactedValue : redactedValue.replace(/https?:\/\/\S+/gi, `[redacted-url]`))
             .slice(0, 200);
     }
 
