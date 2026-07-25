@@ -218,7 +218,7 @@ describe.each([
             await icloud.authenticate();
 
             expect(icloud.getTrustedPhoneNumbers).toHaveBeenCalled()
-            expect(icloud.requestTrustedDeviceMFA).toHaveBeenCalled()
+            expect(icloud.requestTrustedDeviceMFA).not.toHaveBeenCalled()
             expect(trustedEvent).not.toHaveBeenCalled();
             expect(authenticationEvent).toHaveBeenCalled();
             expect(mfaEvent).toHaveBeenCalledWith(`someVal`);
@@ -385,6 +385,7 @@ describe.each([
 
 	        expect(icloud.getSRPLogin).toHaveBeenNthCalledWith(1, undefined, true);
 	        expect(icloud.getSRPLogin).toHaveBeenNthCalledWith(2, undefined, false);
+	        expect(icloud.requestTrustedDeviceMFA).not.toHaveBeenCalled();
 	        expect(mfaEvent).toHaveBeenCalledWith([]);
 	        expect(errorEvent).not.toHaveBeenCalled();
 	    });

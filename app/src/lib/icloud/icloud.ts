@@ -168,7 +168,7 @@ export class iCloud {
                     Resources.logger(this).warn(`iCloud required MFA even though a stored trust token was included; the token may be expired, revoked, or not accepted by Apple`);
                 }
                 const trustedPhoneNumbers = await this.getTrustedPhoneNumbers()
-                await this.requestTrustedDeviceMFA();
+                Resources.logger(this).info(`Waiting for the current MFA challenge; use resend if no code arrives`);
                 Resources.emit(iCPSEventCloud.MFA_REQUIRED, trustedPhoneNumbers);
                 return;
             }
@@ -483,7 +483,7 @@ export class iCloud {
     }
 
     /**
-     * Explicitly requests a trusted-device MFA push. Newer Apple auth flows no longer reliably send this from the SRP 409 alone.
+     * Explicitly requests a trusted-device MFA push. This is used for manual resend to avoid invalidating an existing challenge.
      */
     async requestTrustedDeviceMFA(): Promise<void> {
         Resources.logger(this).info(`Requesting MFA code on trusted devices`);
