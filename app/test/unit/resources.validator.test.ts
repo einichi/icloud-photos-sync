@@ -478,10 +478,8 @@ describe(`Validator`, () => {
 
         test.each([
             {
-                data: {
-                    data: {}
-                },
-                desc: `no phoneNumbers array`,
+                data: {},
+                desc: `no data property`,
             }, {
                 data: {
                     data: {
