@@ -1,8 +1,12 @@
 import {beforeEach, describe, expect, jest, test} from '@jest/globals';
+import {AxiosError, AxiosResponse} from 'axios';
+import fs from 'fs/promises';
 import {iCPSError} from '../../src/app/error/error';
 import {VALIDATOR_ERR} from '../../src/app/error/error-codes';
 import {iCloudPhotos} from '../../src/lib/icloud/icloud-photos/icloud-photos';
 import {Zones} from '../../src/lib/icloud/icloud-photos/query-builder';
+import {Asset, AssetType} from '../../src/lib/photos-library/model/asset';
+import {FileType} from '../../src/lib/photos-library/model/file-type';
 import {iCPSEventCloud, iCPSEventPhotos} from '../../src/lib/resources/events-types';
 import {PhotosSetupResponse} from '../../src/lib/resources/network-types';
 import {Validator} from '../../src/lib/resources/validator';
@@ -585,7 +589,7 @@ describe(`Lookup with retry`, () => {
         jest.useFakeTimers();
         const lookupPromise = (photos as any).performLookupWithRetry(Zones.Primary, recordNames);
         const assertion = expect(lookupPromise).resolves.toEqual([`recordA`]);
-        await jest.advanceTimersByTimeAsync(1000);
+        await jest.advanceTimersByTimeAsync(1500);
 
         await assertion;
         jest.useRealTimers();
@@ -612,6 +616,26 @@ describe(`Lookup with retry`, () => {
         expect(mockedNetworkManager.mock.history.post).toHaveLength(3);
     });
 
+    test(`Uses retryAfter guidance for lookup retry backoff`, async () => {
+        mockedNetworkManager.mock
+            .onPost(lookupURL)
+            .replyOnce(421, {retryAfter: 4})
+            .onPost(lookupURL)
+            .replyOnce(200, {records: [`recordA`]});
+
+        jest.useFakeTimers();
+        const lookupPromise = (photos as any).performLookupWithRetry(Zones.Primary, recordNames);
+        const assertion = expect(lookupPromise).resolves.toEqual([`recordA`]);
+        await jest.advanceTimersByTimeAsync(3999);
+        expect(mockedNetworkManager.mock.history.post).toHaveLength(1);
+        await jest.advanceTimersByTimeAsync(1);
+
+        await assertion;
+        jest.useRealTimers();
+
+        expect(mockedNetworkManager.mock.history.post).toHaveLength(2);
+    });
+
     test(`Does not re-acquire the session or retry on a non-retryable error`, async () => {
         mockedNetworkManager.mock
             .onPost(lookupURL)
@@ -619,6 +643,52 @@ describe(`Lookup with retry`, () => {
 
         await expect((photos as any).performLookupWithRetry(Zones.Primary, recordNames)).rejects.toThrow();
         expect(mockedNetworkManager.mock.history.post).toHaveLength(1);
+    });
+});
+
+describe(`Download asset`, () => {
+    test(`Serializes expired download URL refreshes`, async () => {
+        const firstAsset = new Asset(`c29tZUNoZWNrc3VtMQ==`, 42, FileType.fromExtension(`png`), 42, Zones.Primary, AssetType.ORIG, `IMG_0001`, undefined, undefined, `expired-url-1`, `record1`);
+        const secondAsset = new Asset(`c29tZUNoZWNrc3VtMg==`, 42, FileType.fromExtension(`png`), 42, Zones.Primary, AssetType.ORIG, `IMG_0002`, undefined, undefined, `expired-url-2`, `record2`);
+        const expiredUrlError = new AxiosError(`Expired`, `ERR_BAD_RESPONSE`, undefined, undefined, {
+            status: 410,
+        } as AxiosResponse);
+        const utimes = jest.spyOn(fs, `utimes`)
+            .mockResolvedValue(undefined);
+        let firstRefreshResolve: (() => void) | undefined;
+        const refresh = jest.spyOn(photos as any, `doRefreshAssetDownloadURL`)
+            .mockImplementationOnce(async () => {
+                await new Promise<void>(resolve => {
+                    firstRefreshResolve = resolve;
+                });
+                firstAsset.downloadURL = `fresh-url-1`;
+            })
+            .mockImplementationOnce(async () => {
+                secondAsset.downloadURL = `fresh-url-2`;
+            });
+
+        mockedNetworkManager.downloadData = jest.fn<typeof mockedNetworkManager.downloadData>()
+            .mockRejectedValueOnce(expiredUrlError)
+            .mockRejectedValueOnce(expiredUrlError)
+            .mockResolvedValue(undefined);
+        firstAsset.verify = jest.fn<typeof firstAsset.verify>()
+            .mockResolvedValue(true);
+        secondAsset.verify = jest.fn<typeof secondAsset.verify>()
+            .mockResolvedValue(true);
+
+        const firstDownload = photos.downloadAsset(firstAsset);
+        const secondDownload = photos.downloadAsset(secondAsset);
+        await flushPromises();
+
+        expect(refresh).toHaveBeenCalledTimes(1);
+        firstRefreshResolve?.();
+        await Promise.all([firstDownload, secondDownload]);
+
+        expect(refresh).toHaveBeenCalledTimes(2);
+        expect(mockedNetworkManager.downloadData).toHaveBeenCalledTimes(4);
+        expect(mockedNetworkManager.downloadData).toHaveBeenNthCalledWith(3, `fresh-url-1`, firstAsset.getAssetFilePath(), `IMG_0001.png`);
+        expect(mockedNetworkManager.downloadData).toHaveBeenNthCalledWith(4, `fresh-url-2`, secondAsset.getAssetFilePath(), `IMG_0002.png`);
+        expect(utimes).toHaveBeenCalledTimes(2);
     });
 });
 

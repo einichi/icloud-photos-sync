@@ -1,6 +1,7 @@
 import {AxiosError, AxiosRequestConfig, AxiosResponse} from 'axios';
 import fs from 'fs/promises';
 import {jsonc} from 'jsonc';
+import PQueue from 'p-queue';
 import {ICLOUD_PHOTOS_ERR} from '../../../app/error/error-codes.js';
 import {iCPSError} from '../../../app/error/error.js';
 import {AlbumAssets, AlbumType} from '../../photos-library/model/album.js';
@@ -33,6 +34,7 @@ const EXPIRED_DOWNLOAD_URL_STATUS = 410;
  */
 const URL_REFRESH_LOOKUP_ATTEMPTS = 3;
 const URL_REFRESH_LOOKUP_BACKOFF_BASE_MS = 1000;
+const URL_REFRESH_LOOKUP_BACKOFF_JITTER_MS = 500;
 
 type PhotosQueryPage = {
     records: any[],
@@ -62,6 +64,12 @@ export class iCloudPhotos {
      * Used to classify transient (e.g. session-expiry related) errors encountered while refreshing download URLs.
      */
     private readonly retryPolicy = new SyncRetryPolicy();
+
+    /**
+     * Serializes expired download URL refreshes. iCloud Photos lookup can return transient 421s when many workers
+     * refresh signed URLs at once; downloads can stay concurrent, but refreshes need to be gentle.
+     */
+    private readonly downloadURLRefreshQueue = new PQueue({concurrency: 1});
 
     /**
      * Deduplicates overlapping setup calls for the same Photos service instance.
@@ -516,7 +524,9 @@ export class iCloudPhotos {
                     throw err;
                 }
 
-                const backoffMs = URL_REFRESH_LOOKUP_BACKOFF_BASE_MS * (2 ** (attempt - 1));
+                const retryAfterMs = this.retryPolicy.getRetryAfterMs(err);
+                const backoffMs = retryAfterMs
+                    ?? (URL_REFRESH_LOOKUP_BACKOFF_BASE_MS * (2 ** (attempt - 1))) + Math.floor(Math.random() * URL_REFRESH_LOOKUP_BACKOFF_JITTER_MS);
                 const status = this.retryPolicy.getAxiosError(err)?.response?.status;
                 Resources.logger(this).debug(`Lookup failed${status ? ` with HTTP ${status}` : ``} (attempt ${attempt}/${URL_REFRESH_LOOKUP_ATTEMPTS}), retrying in ${backoffMs}ms`);
                 await new Promise(resolve => setTimeout(resolve, backoffMs));
@@ -1039,6 +1049,14 @@ export class iCloudPhotos {
      * @param asset - The asset whose URL should be refreshed
      */
     private async refreshAssetDownloadURL(asset: Asset): Promise<void> {
+        await this.downloadURLRefreshQueue.add(async () => this.doRefreshAssetDownloadURL(asset));
+    }
+
+    /**
+     * Refreshes a single asset download URL while the refresh queue is held.
+     * @param asset - The asset whose URL should be refreshed
+     */
+    private async doRefreshAssetDownloadURL(asset: Asset): Promise<void> {
         try {
             const downloadRecordName = asset.downloadRecordName ?? asset.recordName;
             if (!downloadRecordName) {

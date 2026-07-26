@@ -131,7 +131,7 @@ export class SyncRetryPolicy {
      * @param err - The original error
      * @returns The delay in milliseconds, if provided
      */
-    private getRetryAfterMs(err: unknown): number | undefined {
+    getRetryAfterMs(err: unknown): number | undefined {
         const axiosError = this.getAxiosError(err);
         const responseData = axiosError?.response?.data as {retryAfter?: unknown} | undefined;
         const retryAfter = responseData?.retryAfter ?? axiosError?.response?.headers?.[`retry-after`];
