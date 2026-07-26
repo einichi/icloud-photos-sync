@@ -510,7 +510,6 @@ describe(`Validator`, () => {
                     }
                 },
                 desc: `no phone number with dial code`,
-            }, {
             },
         ])(`should throw an error for an invalid signin response: $desc`, ({data}) => {
             expect(() => validator.validateAuthInformationResponse(data)).toThrow(VALIDATOR_ERR.AUTH_INFORMATION_RESPONSE);
@@ -776,6 +775,15 @@ describe(`Validator`, () => {
             const data: TrustResponse = {
                 headers: {
                     'x-apple-twosv-trust-token': "someTrustToken", // eslint-disable-line
+                    'x-apple-session-token': "someSessionToken", // eslint-disable-line
+                },
+            };
+            expect(() => validator.validateTrustResponse(data)).not.toThrow();
+        });
+
+        test(`should validate a valid trust response without twosv trust token header`, () => {
+            const data: TrustResponse = {
+                headers: {
                     'x-apple-session-token': "someSessionToken", // eslint-disable-line
                 },
             };

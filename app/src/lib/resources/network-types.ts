@@ -313,7 +313,7 @@ export type TrustResponse = {
          * TwoTrust token for future requests
          * @minLength 1
          */
-        'x-apple-twosv-trust-token': string, // eslint-disable-line
+        'x-apple-twosv-trust-token'?: string, // eslint-disable-line
         /**
          * Session token to setup the account
          * @minLength 1

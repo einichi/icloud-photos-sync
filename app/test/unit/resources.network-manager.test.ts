@@ -741,6 +741,21 @@ describe(`NetworkManager`, () => {
                 expect(networkManager._headerJar.headers.has(`X-Apple-ID-Session-Id`)).toBeFalsy();
             });
 
+            test(`Apply TrustResponse without twosv trust token header keeps existing trust token`, () => {
+                Resources.manager().trustToken = `existingTrustToken`;
+
+                const trustResponse = {
+                    headers: {
+                        'x-apple-session-token': `newSessionToken`,
+                    },
+                } as TrustResponse;
+
+                networkManager.applyTrustResponse(trustResponse);
+
+                expect(Resources.manager()._resources.trustToken).toEqual(`existingTrustToken`);
+                expect(Resources.manager()._resources.sessionSecret).toEqual(`newSessionToken`);
+            });
+
             test.each([{
                 desc: `PCS not required`,
                 pcsRequired: false,
