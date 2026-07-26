@@ -4,6 +4,7 @@ import {iCPSError} from "../../src/app/error/error"
 import {AUTH_ERR, MFA_ERR, WEB_SERVER_ERR} from "../../src/app/error/error-codes"
 import {MockedEventManager, prepareResources} from "../_helpers/_general"
 import {iCPSEvent, iCPSEventApp, iCPSEventCloud, iCPSEventLog, iCPSEventMFA, iCPSEventPhotos, iCPSEventRuntimeError, iCPSEventRuntimeWarning, iCPSEventSyncEngine, iCPSEventWebServer, iCPSState} from "../../src/lib/resources/events-types"
+import {Resources} from "../../src/lib/resources/main"
 
 let mockedEventManager: MockedEventManager
 let mockedState: StateManager
@@ -573,10 +574,25 @@ describe(`State changes`, () => {
             nextSync: serializedState.nextSync,
             prevError: serializedState.prevError,
             prevTrigger: serializedState.prevTrigger,
+            credentialRetryRequired: serializedState.credentialRetryRequired,
             progress: serializedState.progress,
             progressMsg: serializedState.progressMsg,
             trustedPhoneNumbers: serializedState.trustedPhoneNumbers
         }))
+    })
+
+    test(`Should require credential retry on unauthorized auth error when credentials are replaceable`, () => {
+        Resources.manager()._resources.credentialsProvidedAtStartup = false;
+        mockedEventManager.emit(iCPSEventWebServer.REAUTH_REQUESTED);
+        mockedEventManager.emit(iCPSEventWebServer.REAUTH_ERROR, new iCPSError(AUTH_ERR.UNAUTHORIZED));
+
+        expect(mockedState.serialize()).toEqual(expect.objectContaining({
+            credentialRetryRequired: true,
+            prevError: {
+                code: `AUTH_UNAUTHORIZED`,
+                message: `Your credentials seem to be invalid. Please check your iCloud credentials and try again.`,
+            },
+        }));
     })
 
     test(`Should serialize last successful sync stats`, () => {

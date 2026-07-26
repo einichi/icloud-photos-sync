@@ -56,6 +56,7 @@ export type SerializedState = {
     timestamp: number,
     hasCredentials?: boolean,
     credentialsProvidedAtStartup?: boolean,
+    credentialRetryRequired?: boolean,
     nextSync?: number,
     prevError?: {
         message: string,
@@ -636,6 +637,7 @@ export class StateManager {
             state: this.state,
             hasCredentials: Resources.manager().hasCredentials,
             credentialsProvidedAtStartup: Resources.manager().credentialsProvidedAtStartup,
+            credentialRetryRequired: this.isCredentialRetryRequired() || undefined,
             nextSync: this.nextSync,
             prevError: error,
             prevTrigger: this.prevTrigger,
@@ -648,6 +650,11 @@ export class StateManager {
             trustedPhoneNumbers,
             lastSyncStats: this.lastSyncStats,
         };
+    }
+
+    private isCredentialRetryRequired(): boolean {
+        return this.prevError?.getRootErrorCode() === AUTH_ERR.UNAUTHORIZED.code
+            && !Resources.manager().credentialsProvidedAtStartup;
     }
 
     /**

@@ -301,6 +301,18 @@ function updateState(state) {
                 return
             }
 
+            if(state.credentialRetryRequired) {
+                document.getElementById('credential-container').style.display = "flex";
+                if(state.prevError) {
+                    setCopyableErrorText(getReadyFailurePlainText(state))
+                    setStateText(formatReadyFailureText(state))
+                } else {
+                    setStateText("Please enter your Apple ID credentials again.")
+                }
+                enableSymbol('error')
+                return
+            }
+
             document.querySelectorAll(".hidden-when-not-ready").forEach((el) => {
                 el.style.display = "block";
             });
