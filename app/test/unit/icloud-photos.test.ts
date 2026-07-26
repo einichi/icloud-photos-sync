@@ -575,28 +575,30 @@ describe(`Lookup with retry`, () => {
         };
     });
 
-    test(`Re-acquires the session and retries when the session token expired (421)`, async () => {
+    test(`Retries 421 lookup failures without re-authenticating`, async () => {
         mockedNetworkManager.mock
             .onPost(lookupURL)
             .replyOnce(421)
             .onPost(lookupURL)
             .replyOnce(200, {records: [`recordA`]});
 
-        const recoverSpy = jest.fn<() => Promise<void>>().mockResolvedValue();
-        (photos as any).recoverExpiredSession = recoverSpy;
+        jest.useFakeTimers();
+        const lookupPromise = (photos as any).performLookupWithRetry(Zones.Primary, recordNames);
+        const assertion = expect(lookupPromise).resolves.toEqual([`recordA`]);
+        await jest.advanceTimersByTimeAsync(1000);
 
-        await expect((photos as any).performLookupWithRetry(Zones.Primary, recordNames)).resolves.toEqual([`recordA`]);
-        expect(recoverSpy).toHaveBeenCalledTimes(1);
+        await assertion;
+        jest.useRealTimers();
+
         expect(mockedNetworkManager.mock.history.post).toHaveLength(2);
     });
 
-    test(`Re-acquires the session only once, then gives up if the 421 persists`, async () => {
+    test(`Retries persistent 421 lookup failures without emitting session-expired`, async () => {
         mockedNetworkManager.mock
             .onPost(lookupURL)
             .reply(421);
 
-        const recoverSpy = jest.fn<() => Promise<void>>().mockResolvedValue();
-        (photos as any).recoverExpiredSession = recoverSpy;
+        const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
 
         jest.useFakeTimers();
         const lookupPromise = (photos as any).performLookupWithRetry(Zones.Primary, recordNames);
@@ -606,7 +608,7 @@ describe(`Lookup with retry`, () => {
         await assertion;
         jest.useRealTimers();
 
-        expect(recoverSpy).toHaveBeenCalledTimes(1);
+        expect(sessionExpiredEvent).not.toHaveBeenCalled();
         expect(mockedNetworkManager.mock.history.post).toHaveLength(3);
     });
 
@@ -615,51 +617,8 @@ describe(`Lookup with retry`, () => {
             .onPost(lookupURL)
             .reply(404);
 
-        const recoverSpy = jest.fn<() => Promise<void>>().mockResolvedValue();
-        (photos as any).recoverExpiredSession = recoverSpy;
-
         await expect((photos as any).performLookupWithRetry(Zones.Primary, recordNames)).rejects.toThrow();
-        expect(recoverSpy).not.toHaveBeenCalled();
         expect(mockedNetworkManager.mock.history.post).toHaveLength(1);
-    });
-});
-
-describe(`Session recovery`, () => {
-    test(`Emits SESSION_EXPIRED and resolves once the Photos service is ready again`, async () => {
-        const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
-
-        const recoveryPromise = (photos as any).recoverExpiredSession();
-        await flushPromises();
-
-        expect(sessionExpiredEvent).toHaveBeenCalledTimes(1);
-
-        mockedEventManager.emit(iCPSEventPhotos.READY);
-        await expect(recoveryPromise).resolves.toBeUndefined();
-    });
-
-    test(`Shares a single re-authentication across concurrent callers`, async () => {
-        const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
-
-        const first = (photos as any).recoverExpiredSession();
-        const second = (photos as any).recoverExpiredSession();
-        await flushPromises();
-
-        expect(sessionExpiredEvent).toHaveBeenCalledTimes(1);
-
-        mockedEventManager.emit(iCPSEventPhotos.READY);
-        await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
-    });
-
-    test(`Rejects if re-authentication fails`, async () => {
-        mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
-        // The constructor's readiness promise also listens for ERROR; swallow its rejection so it does not surface as unhandled
-        void (photos as any).ready.catch(() => undefined);
-
-        const recoveryPromise = (photos as any).recoverExpiredSession();
-        await flushPromises();
-
-        mockedEventManager.emit(iCPSEventPhotos.ERROR, new Error(`re-authentication failed`));
-        await expect(recoveryPromise).rejects.toThrow();
     });
 });
 

@@ -1,12 +1,11 @@
 import {AxiosError, AxiosRequestConfig, AxiosResponse} from 'axios';
 import fs from 'fs/promises';
 import {jsonc} from 'jsonc';
-import pTimeout from 'p-timeout';
 import {ICLOUD_PHOTOS_ERR} from '../../../app/error/error-codes.js';
 import {iCPSError} from '../../../app/error/error.js';
 import {AlbumAssets, AlbumType} from '../../photos-library/model/album.js';
 import {Asset, AssetType} from '../../photos-library/model/asset.js';
-import {iCPSEventCloud, iCPSEventPhotos, iCPSEventRuntimeWarning} from '../../resources/events-types.js';
+import {iCPSEventPhotos, iCPSEventRuntimeWarning} from '../../resources/events-types.js';
 import {Resources} from '../../resources/main.js';
 import {ENDPOINTS, PhotosSetupResponseZone} from '../../resources/network-types.js';
 import {SyncEngineHelper} from '../../sync-engine/helper.js';
@@ -34,17 +33,6 @@ const EXPIRED_DOWNLOAD_URL_STATUS = 410;
  */
 const URL_REFRESH_LOOKUP_ATTEMPTS = 3;
 const URL_REFRESH_LOOKUP_BACKOFF_BASE_MS = 1000;
-
-/**
- * HTTP status returned by the CloudKit data endpoints once the Web-Auth session token has expired.
- * Unlike a transient failure, this does not recover on retry - the session has to be re-acquired.
- */
-const SESSION_EXPIRED_STATUS = 421;
-
-/**
- * Additional time granted, on top of the configured MFA timeout, to re-acquire an expired session before giving up.
- */
-const SESSION_RECOVERY_GRACE_MS = 5 * 60 * 1000;
 
 type PhotosQueryPage = {
     records: any[],
@@ -74,12 +62,6 @@ export class iCloudPhotos {
      * Used to classify transient (e.g. session-expiry related) errors encountered while refreshing download URLs.
      */
     private readonly retryPolicy = new SyncRetryPolicy();
-
-    /**
-     * Tracks an in-flight session re-acquisition so concurrent download workers share a single re-authentication
-     * instead of each triggering their own when the session expires mid-sync.
-     */
-    private sessionRecovery?: Promise<void>;
 
     /**
      * Deduplicates overlapping setup calls for the same Photos service instance.
@@ -517,96 +499,32 @@ export class iCloudPhotos {
     }
 
     /**
-     * Performs a lookup, recovering from session expiry and retrying transient errors.
+     * Performs a lookup, retrying transient errors.
      * Used while refreshing download URLs during long syncs: a single failed lookup would otherwise drop the asset for the whole run.
-     * A HTTP 421 indicates the Web-Auth session token has expired - retrying the same dead session is futile, so the session is
-     * re-acquired before retrying. Other transient errors (timeouts, 429, 5xx) are retried with exponential backoff.
+     * Retryable errors (timeouts, 409, 421, 429, 5xx) are retried with exponential backoff and remain per-asset failures if exhausted.
      * @param zone - Defines the zone to be used
      * @param recordNames - Record names to look up
      * @param desiredKeys - Optional desired fields to reduce the lookup response
      * @returns The records returned by the backend
      */
     private async performLookupWithRetry(zone: QueryBuilder.Zones, recordNames: string[], desiredKeys?: string[]): Promise<any[]> {
-        let sessionRecovered = false;
         for (let attempt = 1; attempt <= URL_REFRESH_LOOKUP_ATTEMPTS; attempt++) {
             try {
                 return await this.performLookup(zone, recordNames, desiredKeys);
             } catch (err) {
-                const status = this.retryPolicy.getAxiosError(err)?.response?.status;
-
-                // A 421 means the session token expired - the session needs to be re-acquired, not merely retried.
-                // Only attempt this once per lookup to avoid looping if re-authentication does not resolve the failure.
-                if (status === SESSION_EXPIRED_STATUS && !sessionRecovered) {
-                    sessionRecovered = true;
-                    Resources.logger(this).info(`Session token expired while refreshing download URL, re-acquiring session`);
-                    await this.recoverExpiredSession();
-                    continue;
-                }
-
                 if (attempt === URL_REFRESH_LOOKUP_ATTEMPTS || !this.retryPolicy.isRetryableSyncError(err)) {
                     throw err;
                 }
 
                 const backoffMs = URL_REFRESH_LOOKUP_BACKOFF_BASE_MS * (2 ** (attempt - 1));
-                Resources.logger(this).debug(`Lookup failed (attempt ${attempt}/${URL_REFRESH_LOOKUP_ATTEMPTS}), retrying in ${backoffMs}ms`);
+                const status = this.retryPolicy.getAxiosError(err)?.response?.status;
+                Resources.logger(this).debug(`Lookup failed${status ? ` with HTTP ${status}` : ``} (attempt ${attempt}/${URL_REFRESH_LOOKUP_ATTEMPTS}), retrying in ${backoffMs}ms`);
                 await new Promise(resolve => setTimeout(resolve, backoffMs));
             }
         }
 
         throw new iCPSError(ICLOUD_PHOTOS_ERR.UNEXPECTED_LOOKUP_RESPONSE)
             .addMessage(`exhausted retries for ${recordNames.join(`, `)}`);
-    }
-
-    /**
-     * Re-acquires an expired iCloud session by triggering the existing re-authentication flow and waiting for the Photos
-     * service to become ready again. Concurrent callers share a single re-authentication so a wave of simultaneously expiring
-     * download workers does not start multiple competing logins.
-     * @returns A promise that resolves once the session is ready again, or rejects if re-authentication fails or times out
-     */
-    private async recoverExpiredSession(): Promise<void> {
-        if (!this.sessionRecovery) {
-            this.sessionRecovery = this.acquireFreshSession()
-                .finally(() => {
-                    this.sessionRecovery = undefined;
-                });
-        }
-
-        await this.sessionRecovery;
-    }
-
-    /**
-     * Drives a single session re-acquisition: arms listeners for the next readiness/error signal, then emits SESSION_EXPIRED
-     * to kick off the re-authentication flow owned by the iCloud class.
-     * @returns A promise that resolves on the next READY event, or rejects on ERROR or timeout
-     */
-    private acquireFreshSession(): Promise<void> {
-        const events = Resources.events(this);
-        let cleanup = () => undefined;
-        const sessionReady = new Promise<void>((resolve, reject) => {
-            const onReady = () => {
-                cleanup();
-                resolve();
-            };
-            const onError = (err: unknown) => {
-                cleanup();
-                reject(err);
-            };
-            cleanup = () => {
-                events.removeListener(iCPSEventPhotos.READY, onReady);
-                events.removeListener(iCPSEventPhotos.ERROR, onError);
-            };
-            events
-                .once(iCPSEventPhotos.READY, onReady)
-                .once(iCPSEventPhotos.ERROR, onError);
-        });
-
-        Resources.emit(iCPSEventCloud.SESSION_EXPIRED);
-
-        return pTimeout(sessionReady, {
-            milliseconds: Resources.manager().mfaTimeout * 1000 + SESSION_RECOVERY_GRACE_MS,
-            message: new iCPSError(ICLOUD_PHOTOS_ERR.DOWNLOAD_URL_REFRESH)
-                .addMessage(`timed out re-acquiring expired session`),
-        }).finally(cleanup);
     }
 
     /**
