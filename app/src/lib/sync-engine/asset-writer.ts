@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import {iCPSError} from '../../app/error/error.js';
-import {LIBRARY_ERR, RESOURCES_ERR} from '../../app/error/error-codes.js';
+import {LIBRARY_ERR, RESOURCES_ERR, SYNC_ERR} from '../../app/error/error-codes.js';
 import {iCloud} from '../icloud/icloud.js';
 import {PhotosLibrary} from '../photos-library/photos-library.js';
 import {AssetChecksum} from '../photos-library/asset-checksum.js';
@@ -13,6 +13,12 @@ import {SyncRetryPolicy} from './retry-policy.js';
 
 const ASSET_PROGRESS_LOG_PERCENT_INTERVAL = 10;
 const ASSET_WRITE_ATTEMPTS = 3;
+
+type AssetWriteFailure = {
+    assetName: string,
+    asset: Asset,
+    error: iCPSError,
+}
 
 /**
  * Writes asset changes to disk by deleting stale local assets and downloading missing remote assets.
@@ -67,6 +73,7 @@ export class AssetWriter {
             logAssetWriteProgress();
         }));
 
+        const failedAssetWrites: AssetWriteFailure[] = [];
         const nextAsset = toBeAdded.values();
         const configuredWorkerCount = Resources.manager().downloadThreads === Infinity
             ? toBeAdded.length
@@ -74,10 +81,21 @@ export class AssetWriter {
         const workerCount = Math.min(configuredWorkerCount, toBeAdded.length);
         await Promise.all(Array.from({length: workerCount}, async () => {
             for (let next = nextAsset.next(); !next.done; next = nextAsset.next()) {
-                await this.addAsset(next.value);
+                const writeError = await this.addAsset(next.value);
+                if (writeError) {
+                    failedAssetWrites.push({
+                        assetName: this.getAssetProgressDisplayName(next.value),
+                        asset: next.value,
+                        error: writeError,
+                    });
+                }
                 logAssetWriteProgress();
             }
         }));
+
+        if (failedAssetWrites.length > 0) {
+            throw this.buildAssetWriteError(failedAssetWrites);
+        }
     }
 
     /**
@@ -107,7 +125,7 @@ export class AssetWriter {
      * @param asset - The asset that needs to be downloaded
      * @returns A promise that resolves once the file has been successfully written to disk
      */
-    async addAsset(asset: Asset) {
+    async addAsset(asset: Asset): Promise<iCPSError | undefined> {
         const assetProgressDisplayName = this.getAssetProgressDisplayName(asset);
         // Captured before any verification or cleanup deletes the existing file: a download that replaces a file already
         // on disk is a redownload (the local copy was missing, corrupted, or no longer matched iCloud), as opposed to a
@@ -120,9 +138,10 @@ export class AssetWriter {
                 return;
             }
         } catch (err) {
+            const syncError = iCPSError.toiCPSError(err);
             await this.deleteFailedAsset(asset);
-            Resources.emit(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, err, asset);
-            return;
+            Resources.emit(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, syncError, asset);
+            return syncError;
         }
 
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_STARTED, assetProgressDisplayName);
@@ -141,14 +160,32 @@ export class AssetWriter {
                     continue;
                 }
 
-                Resources.emit(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, err, asset);
-                return;
+                const syncError = iCPSError.toiCPSError(err);
+                Resources.emit(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, syncError, asset);
+                return syncError;
             }
         }
 
         const downloadReason: AssetDownloadReason = replacedExistingAsset ? `redownloaded` : `new`;
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_DOWNLOADED, assetProgressDisplayName, downloadReason);
         Resources.emit(iCPSEventSyncEngine.WRITE_ASSET_COMPLETED, assetProgressDisplayName);
+    }
+
+    /**
+     * Builds a sync-failing error after all queued asset writes have been attempted.
+     * @param failedAssetWrites - Asset writes that were permanently unsuccessful
+     * @returns An aggregate write failure
+     */
+    private buildAssetWriteError(failedAssetWrites: AssetWriteFailure[]): iCPSError {
+        return new iCPSError(SYNC_ERR.WRITE_ASSETS)
+            .addMessage(`${failedAssetWrites.length} asset(s) were not copied`)
+            .addContext(`failedAssetWrites`, failedAssetWrites.map(failure => ({
+                assetName: failure.assetName,
+                assetRecordName: failure.asset.recordName,
+                downloadRecordName: failure.asset.downloadRecordName,
+                reason: failure.error.getDescription(),
+            })))
+            .addCause(failedAssetWrites[0].error);
     }
 
     /**

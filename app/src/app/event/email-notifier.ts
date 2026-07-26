@@ -1,6 +1,7 @@
 import net from 'net';
 import tls from 'tls';
-import {AssetDownloadReason, iCPSEventCloud, iCPSEventRuntimeError, iCPSEventSyncEngine, iCPSState} from "../../lib/resources/events-types.js";
+import {AssetDownloadReason, iCPSEventCloud, iCPSEventRuntimeError, iCPSEventRuntimeWarning, iCPSEventSyncEngine, iCPSState} from "../../lib/resources/events-types.js";
+import {Asset} from "../../lib/photos-library/model/asset.js";
 import {Resources} from "../../lib/resources/main.js";
 import {SmtpConfig} from "../../lib/resources/resource-manager.js";
 import {LogLevel, LogMessage} from "../../lib/resources/state-manager.js";
@@ -19,10 +20,16 @@ type SyncEmailReport = {
     startedAt: number,
     downloadedNew: string[],
     downloadedRedownloaded: string[],
+    failedAssetWrites: FailedAssetWrite[],
     hashCheckingOccurred: boolean,
     hashCheckedCount: number,
     hashCheckTotal?: number,
     errors: string[],
+}
+
+type FailedAssetWrite = {
+    assetName: string,
+    reason: string,
 }
 
 class SmtpClient {
@@ -204,6 +211,7 @@ export class EmailNotifier {
                     startedAt: Date.now(),
                     downloadedNew: [],
                     downloadedRedownloaded: [],
+                    failedAssetWrites: [],
                     hashCheckingOccurred: false,
                     hashCheckedCount: 0,
                     errors: [],
@@ -232,9 +240,33 @@ export class EmailNotifier {
 
                 report.downloadedNew.push(assetName);
             })
+            .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, (err: Error, asset?: Asset) => {
+                const report = this.currentSyncReport;
+                if (!report) {
+                    return;
+                }
+
+                const syncError = iCPSError.toiCPSError(err);
+                report.failedAssetWrites.push({
+                    assetName: this.getAssetDisplayName(asset),
+                    reason: this.getFailedAssetWriteReason(syncError),
+                });
+            })
+            .on(iCPSEventSyncEngine.RETRY, () => {
+                const report = this.currentSyncReport;
+                if (!report) {
+                    return;
+                }
+
+                report.failedAssetWrites = [];
+            })
             .on(iCPSState.LOG_ADDED, (logMsg: LogMessage) => {
                 const report = this.currentSyncReport;
                 if (!report || ![LogLevel.WARN, LogLevel.ERROR].includes(logMsg.level)) {
+                    return;
+                }
+
+                if (this.shouldExcludeFromReportWarnings(logMsg)) {
                     return;
                 }
 
@@ -273,21 +305,26 @@ export class EmailNotifier {
         const downloadedNewCount = report.downloadedNew.length;
         const downloadedRedownloadedCount = report.downloadedRedownloaded.length;
         const downloadedTotalCount = downloadedNewCount + downloadedRedownloadedCount;
-        const errorCount = report.errors.length;
+        const failedAssetWriteCount = report.failedAssetWrites.length;
+        const errorCount = report.errors.length + failedAssetWriteCount;
+        const displayStatus = status === `failed`
+            ? `failed`
+            : errorCount > 0 ? `completed with warnings` : `success`;
         const finishedAt = Date.now();
 
         await this.send({
-            subject: `iCloud Photos Sync ${status}: ${downloadedTotalCount} downloaded, ${errorCount} warning/error(s)`,
+            subject: `iCloud Photos Sync ${displayStatus}: ${downloadedTotalCount} downloaded, ${failedAssetWriteCount} not copied, ${errorCount} warning/error(s)`,
             text: [
                 `Summary`,
                 `-------`,
-                `Status: ${status}`,
+                `Status: ${displayStatus}`,
                 `Started: ${new Date(report.startedAt).toLocaleString()}`,
                 `Finished: ${new Date(finishedAt).toLocaleString()}`,
                 `Duration: ${this.formatDuration(finishedAt - report.startedAt)}`,
                 `Downloaded: ${downloadedTotalCount} file(s) (${downloadedNewCount} new, ${downloadedRedownloadedCount} redownloaded after mismatch)`,
+                `Files not copied: ${failedAssetWriteCount}`,
                 `Hash checking: ${report.hashCheckingOccurred ? `yes (${report.hashCheckedCount}/${report.hashCheckTotal} kept asset(s) checked)` : `no`}`,
-                `Warnings/errors: ${errorCount}`,
+                `Warnings/errors: ${errorCount} (${report.errors.length} other, ${failedAssetWriteCount} failed file(s))`,
                 ``,
                 `New Downloads`,
                 `-------------`,
@@ -296,6 +333,10 @@ export class EmailNotifier {
                 `Redownloaded After Mismatch`,
                 `---------------------------`,
                 this.formatList(report.downloadedRedownloaded),
+                ``,
+                `Files Not Copied`,
+                `----------------`,
+                this.formatFailedAssetWrites(report.failedAssetWrites),
                 ``,
                 `Warnings/Errors`,
                 `---------------`,
@@ -372,6 +413,50 @@ export class EmailNotifier {
         }
 
         return listedItems.join(`\n`);
+    }
+
+    private formatFailedAssetWrites(items: FailedAssetWrite[]): string {
+        if (items.length === 0) {
+            return `None`;
+        }
+
+        const groups = new Map<string, string[]>();
+        for (const item of items) {
+            const group = groups.get(item.reason) ?? [];
+            group.push(item.assetName);
+            groups.set(item.reason, group);
+        }
+
+        return Array.from(groups.entries())
+            .map(([reason, assetNames]) => [
+                `${reason} (${assetNames.length})`,
+                ...assetNames.sort().map(assetName => `- ${assetName}`),
+            ].join(`\n`))
+            .join(`\n\n`);
+    }
+
+    private getAssetDisplayName(asset?: Asset): string {
+        if (!asset) {
+            return `unknown asset`;
+        }
+
+        if (asset.origFilename) {
+            return asset.getPrettyFilename();
+        }
+
+        return asset.getAssetFilename();
+    }
+
+    private getFailedAssetWriteReason(err: iCPSError): string {
+        const statusCode = err.getDescription().match(/status code (\d+)/)?.[1];
+        const reason = err.getRootErrorCode(true);
+
+        return statusCode ? `${reason} (HTTP ${statusCode})` : reason;
+    }
+
+    private shouldExcludeFromReportWarnings(logMsg: LogMessage): boolean {
+        return (logMsg.source === `SyncEngine` && logMsg.message.startsWith(`Retrying asset write for `))
+            || (logMsg.source === `RuntimeWarning` && logMsg.message.startsWith(`Error while writing asset `));
     }
 
     private formatDuration(durationMs: number): string {

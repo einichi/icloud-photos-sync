@@ -233,6 +233,7 @@ function setLastSyncStats(stats) {
         ["Local albums", formatCount(stats.localAlbumCount)],
         ["New downloads", formatCount(stats.newDownloadCount)],
         ["Redownloads", formatCount(stats.redownloadCount)],
+        ["Files not copied", formatCount(stats.failedAssetWriteCount)],
         ["Hash checked", hashChecked],
         ["Warnings/errors", formatCount(stats.warningErrorCount)],
     ];

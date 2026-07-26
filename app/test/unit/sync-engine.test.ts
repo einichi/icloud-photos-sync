@@ -569,7 +569,10 @@ describe(`Handle processing queue`, () => {
 
             const toBeAdded = [asset1, asset2, asset3];
 
-            await syncEngine.writeAssets([[], toBeAdded, []]);
+            await expect(syncEngine.writeAssets([[], toBeAdded, []])).rejects.toMatchObject({
+                code: SYNC_ERR.WRITE_ASSETS.code,
+                messages: [`1 asset(s) were not copied`],
+            });
 
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledTimes(3);
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(1, asset1);
@@ -586,7 +589,8 @@ describe(`Handle processing queue`, () => {
             expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledWith(asset3);
         });
 
-        test(`Only adding with download error`, async () => {
+        test(`Only adding with download errors attempts every asset before failing`, async () => {
+            mockedResourceManager._resources.downloadThreads = 1;
             const asset1 = new Asset(testChecksum(`asset1`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test1`, `somekey`, testChecksum(`asset1`), `https://icloud.com`, `somerecordname1`, false);
             asset1.verify = jest.fn<typeof asset1.verify>();
             const asset2 = new Asset(testChecksum(`asset2`), 42, FileType.fromExtension(`png`), 42, getRandomZone(), AssetType.EDIT, `test2`, `somekey`, testChecksum(`asset2`), `https://icloud.com`, `somerecordname2`, false);
@@ -595,28 +599,51 @@ describe(`Handle processing queue`, () => {
             asset3.verify = jest.fn<typeof asset3.verify>();
 
             const downloadError = new Error(`download error`);
+            const secondDownloadError = new Error(`second download error`);
             syncEngine.icloud.photos.downloadAsset = jest.fn<typeof syncEngine.icloud.photos.downloadAsset>()
                 .mockResolvedValueOnce()
-                .mockResolvedValueOnce()
-                .mockRejectedValueOnce(downloadError);
+                .mockRejectedValueOnce(downloadError)
+                .mockRejectedValueOnce(secondDownloadError);
 
             const toBeAdded = [asset1, asset2, asset3];
 
-            await expect(syncEngine.writeAssets([[], toBeAdded, []])).resolves.toBeUndefined();
+            await expect(syncEngine.writeAssets([[], toBeAdded, []])).rejects.toMatchObject({
+                code: SYNC_ERR.WRITE_ASSETS.code,
+                messages: [`2 asset(s) were not copied`],
+                context: {
+                    failedAssetWrites: expect.arrayContaining([
+                        expect.objectContaining({
+                            assetName: `test2-edited.png`,
+                            reason: expect.stringContaining(`download error`),
+                        }),
+                        expect.objectContaining({
+                            assetName: `test3.png`,
+                            reason: expect.stringContaining(`second download error`),
+                        }),
+                    ]),
+                },
+            });
 
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenCalledTimes(3);
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(1, asset1);
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(2, asset2);
             expect(syncEngine.icloud.photos.downloadAsset).toHaveBeenNthCalledWith(3, asset3);
 
-            expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(2);
+            expect(writeAssetCompleteEvent).toHaveBeenCalledTimes(1);
             expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(1, `test1-edited.png`);
-            expect(writeAssetCompleteEvent).toHaveBeenNthCalledWith(2, `test2-edited.png`);
-            expect(writeAssetErrorEvent).toHaveBeenCalledTimes(1);
-            expect(writeAssetErrorEvent).toHaveBeenCalledWith(downloadError, asset3);
+            expect(writeAssetErrorEvent).toHaveBeenCalledTimes(2);
+            expect(writeAssetErrorEvent).toHaveBeenNthCalledWith(1, expect.objectContaining({
+                cause: downloadError,
+                code: `UNKNOWN`,
+            }), asset2);
+            expect(writeAssetErrorEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({
+                cause: secondDownloadError,
+                code: `UNKNOWN`,
+            }), asset3);
 
-            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledTimes(1);
-            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledWith(asset3);
+            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenCalledTimes(2);
+            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenNthCalledWith(1, asset2);
+            expect(syncEngine.photosLibrary.deleteAsset).toHaveBeenNthCalledWith(2, asset3);
         });
 
         test(`Retries transient asset download timeout before reporting an error`, async () => {

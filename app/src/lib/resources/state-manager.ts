@@ -86,6 +86,7 @@ export type SyncStats = {
     localAlbumCount?: number,
     newDownloadCount: number,
     redownloadCount: number,
+    failedAssetWriteCount: number,
     hashCheckingOccurred: boolean,
     hashCheckedCount: number,
     hashCheckTotal?: number,
@@ -274,6 +275,7 @@ export class StateManager {
             })
             .on(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, (_err?: Error, asset?: Asset) => {
                 const assetName = this.getAssetDisplayName(asset);
+                this.updateSyncStats({failedAssetWriteCount: (this.currentSyncStats?.failedAssetWriteCount ?? 0) + 1});
                 this.updateAssetProgress(this.assetProgressTracker.finishAsset(assetName));
             })
             .on(iCPSEventSyncEngine.WRITE_ASSETS_COMPLETED, () => {
@@ -292,6 +294,7 @@ export class StateManager {
                 this.finishSyncStats(`completed`);
             })
             .on(iCPSEventSyncEngine.RETRY, (retryCount: number, err: iCPSError, backoffMs?: number) => {
+                this.updateSyncStats({failedAssetWriteCount: 0});
                 const retryMsg = backoffMs
                     ? `Settling outstanding requests, then waiting ${Math.ceil(backoffMs / 1000)}s before refreshing iCloud connection & retrying`
                     : `Refreshing iCloud connection & retrying`;
@@ -385,6 +388,7 @@ export class StateManager {
             startedAt: Date.now(),
             newDownloadCount: 0,
             redownloadCount: 0,
+            failedAssetWriteCount: 0,
             hashCheckingOccurred: false,
             hashCheckedCount: 0,
             warningErrorCount: 0,
@@ -584,12 +588,20 @@ export class StateManager {
             time: Date.now()
         }
 
-        if (this.currentSyncStats && [LogLevel.WARN, LogLevel.ERROR].includes(level)) {
+        if (this.currentSyncStats && this.shouldCountLogAsSyncWarning(level, msg.source, message)) {
             this.updateSyncStats({warningErrorCount: this.currentSyncStats.warningErrorCount + 1});
         }
 
         this.log.push(msg)
         Resources.event().emit(iCPSState.LOG_ADDED, msg)
+    }
+
+    private shouldCountLogAsSyncWarning(level: LogLevel, source: string, message: string): boolean {
+        if (![LogLevel.WARN, LogLevel.ERROR].includes(level)) {
+            return false;
+        }
+
+        return !(source === `SyncEngine` && message.startsWith(`Retrying asset write for `));
     }
 
     /**

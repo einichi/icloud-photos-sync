@@ -19,6 +19,10 @@ export const DELETE_ALBUM: ErrorStruct = buildErrorStruct(
     name, prefix, `DELETE_ALBUM`, `Unable to delete album`,
 );
 
+export const WRITE_ASSETS: ErrorStruct = buildErrorStruct(
+    name, prefix, `WRITE_ASSETS`, `Unable to write all queued assets`,
+);
+
 export const MAX_RETRY: ErrorStruct = buildErrorStruct(
     name, prefix, `MAX_RETRY`, `Sync did not complete successfully within expected amount of tries`,
 );

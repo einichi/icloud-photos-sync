@@ -1,7 +1,7 @@
 import {beforeEach, describe, expect, jest, test} from "@jest/globals"
 import {LogLevel, LogMessage, SerializedState, StateManager, StateTrigger} from "../../src/lib/resources/state-manager"
 import {iCPSError} from "../../src/app/error/error"
-import {AUTH_ERR, MFA_ERR, WEB_SERVER_ERR} from "../../src/app/error/error-codes"
+import {AUTH_ERR, MFA_ERR, SYNC_ERR, WEB_SERVER_ERR} from "../../src/app/error/error-codes"
 import {MockedEventManager, prepareResources} from "../_helpers/_general"
 import {iCPSEvent, iCPSEventApp, iCPSEventCloud, iCPSEventLog, iCPSEventMFA, iCPSEventPhotos, iCPSEventRuntimeError, iCPSEventRuntimeWarning, iCPSEventSyncEngine, iCPSEventWebServer, iCPSState} from "../../src/lib/resources/events-types"
 import {Resources} from "../../src/lib/resources/main"
@@ -612,6 +612,7 @@ describe(`State changes`, () => {
             localAlbumCount: 1,
             newDownloadCount: 1,
             redownloadCount: 1,
+            failedAssetWriteCount: 0,
             hashCheckingOccurred: true,
             hashCheckedCount: 8,
             hashCheckTotal: 8,
@@ -634,11 +635,48 @@ describe(`State changes`, () => {
             localAlbumCount: 1,
             newDownloadCount: 0,
             redownloadCount: 0,
+            failedAssetWriteCount: 0,
             hashCheckingOccurred: false,
             hashCheckedCount: 0,
             warningErrorCount: 1,
             finishedAt: expect.any(Number),
             durationMs: expect.any(Number),
+        }));
+    });
+
+    test(`Should count failed asset writes separately from downloads`, () => {
+        mockedEventManager.emit(iCPSEventSyncEngine.START);
+        mockedEventManager.emit(iCPSEventSyncEngine.WRITE_ASSETS, 0, 1, 0);
+        mockedEventManager.emit(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, new Error(`Test`));
+        mockedEventManager.emit(iCPSEventSyncEngine.DONE);
+
+        expect(mockedState.serialize().lastSyncStats).toEqual(expect.objectContaining({
+            status: `completed`,
+            newDownloadCount: 0,
+            redownloadCount: 0,
+            failedAssetWriteCount: 1,
+            warningErrorCount: 1,
+        }));
+    });
+
+    test(`Should not count transient asset write retry logs as sync warnings`, () => {
+        mockedEventManager.emit(iCPSEventSyncEngine.START);
+        mockedEventManager.emit(iCPSEventLog.WARN, `SyncEngine`, `Retrying asset write for IMG_0001.HEIC after retryable error (attempt 1/3): Request failed with status code 421`);
+        mockedEventManager.emit(iCPSEventSyncEngine.DONE);
+
+        expect(mockedState.serialize().lastSyncStats).toEqual(expect.objectContaining({
+            warningErrorCount: 0,
+        }));
+    });
+
+    test(`Should clear failed asset write count when the sync retries`, () => {
+        mockedEventManager.emit(iCPSEventSyncEngine.START);
+        mockedEventManager.emit(iCPSEventRuntimeWarning.WRITE_ASSET_ERROR, new Error(`Test`));
+        mockedEventManager.emit(iCPSEventSyncEngine.RETRY, 2, new iCPSError(SYNC_ERR.UNKNOWN), 1000);
+        mockedEventManager.emit(iCPSEventSyncEngine.DONE);
+
+        expect(mockedState.serialize().lastSyncStats).toEqual(expect.objectContaining({
+            failedAssetWriteCount: 0,
         }));
     });
 
