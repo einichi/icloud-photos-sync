@@ -543,6 +543,13 @@ export class ResourceManager {
     }
 
     /**
+     * @returns Whether a session secret is currently available in memory
+     */
+    get hasSessionSecret(): boolean {
+        return this._resources.sessionSecret !== undefined;
+    }
+
+    /**
      * Sets the session secret of the account
      * @param sessionSecret - The session secret to set
      */

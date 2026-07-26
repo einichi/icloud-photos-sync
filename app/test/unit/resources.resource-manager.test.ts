@@ -910,6 +910,12 @@ describe(`ResourceManager`, () => {
                 expect(resourceManager.sessionSecret).toEqual(resources.sessionSecret);
             });
 
+            test(`should indicate whether a session secret is present`, () => {
+                expect(resourceManager.hasSessionSecret).toBeTruthy();
+                resourceManager._resources.sessionSecret = undefined!;
+                expect(resourceManager.hasSessionSecret).toBeFalsy();
+            });
+
             test(`should throw an error if no session secret is set`, () => {
                 resourceManager._resources.sessionSecret = undefined!;
                 expect(() => resourceManager.sessionSecret).toThrow(/^No session secret present$/);

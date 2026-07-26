@@ -121,8 +121,10 @@ export class CLIInterface {
             });
 
         Resources.events(this)
-            .on(iCPSEventApp.TOKEN, () => {
-                this.print(chalk.green(`Validated iCloud trust token`));
+            .on(iCPSEventApp.TOKEN, (token?: string) => {
+                this.print(chalk.green(token
+                    ? `Validated iCloud trust token`
+                    : `Validated iCloud authentication session (Apple did not issue a reusable trust token)`));
             })
             .on(iCPSEventApp.SCHEDULED, (next: Date) => {
                 this.print(chalk.white(this.getHorizontalLine()));

@@ -337,6 +337,36 @@ describe(`App control flow`, () => {
             expect(Resources._instances.event.removeListenersFromRegistry).toHaveBeenCalledTimes(2);
         });
 
+        test(`Reuses an existing web-auth session for sync without starting a new authentication flow`, async () => {
+            const syncApp = await appFactory(validOptions.sync) as SyncApp;
+
+            syncApp.acquireLibraryLock = jest.fn<typeof syncApp.acquireLibraryLock>()
+                .mockResolvedValue();
+            syncApp.icloud.authenticateExistingSession = jest.fn<typeof syncApp.icloud.authenticateExistingSession>()
+                .mockResolvedValue(true);
+            syncApp.icloud.authenticate = jest.fn<typeof syncApp.icloud.authenticate>()
+                .mockResolvedValue(true);
+            syncApp.icloud.logout = jest.fn<typeof syncApp.icloud.logout>()
+                .mockResolvedValue();
+            syncApp.syncEngine.sync = jest.fn<typeof syncApp.syncEngine.sync>()
+                .mockResolvedValue([[], []]);
+            syncApp.releaseLibraryLock = jest.fn<typeof syncApp.releaseLibraryLock>()
+                .mockResolvedValue();
+            Resources._instances.network.resetSession = jest.fn<typeof Resources._instances.network.resetSession>()
+                .mockResolvedValue();
+            Resources._instances.event.removeListenersFromRegistry = jest.fn<typeof Resources._instances.event.removeListenersFromRegistry>()
+                .mockReturnValue(Resources._instances.event);
+
+            await syncApp.run();
+
+            expect(syncApp.acquireLibraryLock).toHaveBeenCalledTimes(1);
+            expect(syncApp.icloud.authenticateExistingSession).toHaveBeenCalledTimes(1);
+            expect(syncApp.icloud.authenticate).not.toHaveBeenCalled();
+            expect(syncApp.icloud.logout).not.toHaveBeenCalled();
+            expect(syncApp.syncEngine.sync).toHaveBeenCalledTimes(1);
+            expect(syncApp.releaseLibraryLock).toHaveBeenCalledTimes(1);
+        });
+
         test(`Handle MFA not provided`, async () => {
             const syncApp = await appFactory(validOptions.sync) as SyncApp;
 

@@ -141,7 +141,7 @@ abstract class iCloudApp extends iCPSApp {
      * @returns A promise that resolves to true once the iCloud service is fully available. If it resolves to false, the MFA code was not provided in time and the object is not ready.
      * @throws An iCPSError in case an error occurs
      */
-    async run(): Promise<unknown> {
+    async run(options: {reuseExistingSession?: boolean} = {}): Promise<unknown> {
         if (!Resources.manager().hasCredentials) {
             throw new iCPSError(RESOURCES_ERR.NO_CREDENTIALS);
         }
@@ -154,6 +154,10 @@ abstract class iCloudApp extends iCPSApp {
         }
 
         try {
+            if (options.reuseExistingSession && await this.icloud.authenticateExistingSession()) {
+                return true;
+            }
+
             return await this.icloud.authenticate();
         } catch (err) {
             throw new iCPSError(AUTH_ERR.FAILED)
@@ -304,7 +308,7 @@ export class SyncApp extends iCloudApp {
      */
     async run(): Promise<unknown> {
         try {
-            const ready = await super.run() as boolean;
+            const ready = await super.run({reuseExistingSession: true}) as boolean;
             if (!ready) {
                 return [[], []];
             }

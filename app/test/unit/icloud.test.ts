@@ -1078,6 +1078,40 @@ describe.each([
     });
 
     describe(`Setup iCloud`, () => {
+        test(`Existing web-auth session not available`, async () => {
+            mockedResourceManager._resources.sessionSecret = undefined!;
+            icloud.setupAccount = jest.fn<typeof icloud.setupAccount>()
+                .mockResolvedValue(true);
+
+            await expect(icloud.authenticateExistingSession()).resolves.toBeFalsy();
+
+            expect(icloud.setupAccount).not.toHaveBeenCalled();
+        });
+
+        test(`Existing web-auth session can be reused`, async () => {
+            mockedResourceManager._resources.sessionSecret = Config.iCloudAuthSecrets.sessionSecret;
+            icloud.setupAccount = jest.fn<typeof icloud.setupAccount>(async () => {
+                mockedEventManager.emit(iCPSEventPhotos.READY);
+                return true;
+            });
+
+            await expect(icloud.authenticateExistingSession()).resolves.toBeTruthy();
+
+            expect(icloud.setupAccount).toHaveBeenCalledWith({emitSessionExpired: false});
+        });
+
+        test(`Expired existing web-auth session falls back without emitting session-expired`, async () => {
+            mockedResourceManager._resources.sessionSecret = Config.iCloudAuthSecrets.sessionSecret;
+            icloud.setupAccount = jest.fn<typeof icloud.setupAccount>()
+                .mockResolvedValue(false);
+            const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
+
+            await expect(icloud.authenticateExistingSession()).resolves.toBeFalsy();
+
+            expect(icloud.setupAccount).toHaveBeenCalledWith({emitSessionExpired: false});
+            expect(sessionExpiredEvent).not.toHaveBeenCalled();
+        });
+
         test(`Success`, async () => {
             mockedNetworkManager.sessionToken = Config.iCloudAuthSecrets.sessionSecret;
             mockedResourceManager._resources.trustToken = Config.trustToken;
@@ -1181,6 +1215,22 @@ describe.each([
             await icloud.setupAccount();
 
             expect(sessionExpiredEvent).toHaveBeenCalled();
+            expect(mockedValidator.validateSetupResponse).not.toHaveBeenCalled();
+        });
+
+        test(`Session expired without fallback event`, async () => {
+            mockedNetworkManager.sessionToken = Config.iCloudAuthSecrets.sessionSecret;
+            mockedValidator.validateSetupResponse = jest.fn<typeof mockedValidator.validateSetupResponse>();
+
+            const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
+
+            mockedNetworkManager.mock
+                .onAny()
+                .reply(421);
+
+            await expect(icloud.setupAccount({emitSessionExpired: false})).resolves.toBeFalsy();
+
+            expect(sessionExpiredEvent).not.toHaveBeenCalled();
             expect(mockedValidator.validateSetupResponse).not.toHaveBeenCalled();
         });
 

@@ -11,6 +11,15 @@ import {iCloudPhotos} from './icloud-photos/icloud-photos.js';
 import {iCloudCrypto} from './icloud.crypto.js';
 import {MFAMethod} from './mfa/mfa-method.js';
 
+type ReadyWait = {
+    promise: Promise<boolean>,
+    cancel: () => void,
+}
+
+type SetupAccountOptions = {
+    emitSessionExpired?: boolean,
+}
+
 /**
  * This class holds the iCloud connection
  */
@@ -84,9 +93,13 @@ export class iCloud {
      * @returns A promise that will resolve to true, if the connection was established successfully, false in case the MFA code was not provided in time or reject, in case there is an error
      */
     getReady(): Promise<boolean> {
+        return this.waitForReady(this.createReadyWait());
+    }
+
+    private createReadyWait(): ReadyWait {
         const events = Resources.events(this);
         let cleanup = () => undefined;
-        const ready = new Promise<boolean>((resolve, reject) => {
+        const promise = new Promise<boolean>((resolve, reject) => {
             const onReady = () => {
                 cleanup();
                 resolve(true);
@@ -110,10 +123,44 @@ export class iCloud {
                 .once(iCPSEventCloud.ERROR, onError);
         });
 
-        return pTimeout(ready, {
+        return {
+            promise,
+            cancel: cleanup,
+        };
+    }
+
+    private waitForReady(readyWait: ReadyWait): Promise<boolean> {
+        return pTimeout(readyWait.promise, {
             milliseconds: Resources.manager().mfaTimeout * 1000 + (1000 * 60 * 5), // 5 minutes on top of mfa timeout should be sufficient
             message: new iCPSError(AUTH_ERR.SETUP_TIMEOUT),
-        }).finally(cleanup);
+        }).finally(readyWait.cancel);
+    }
+
+    /**
+     * Attempts to reuse an existing Apple web-auth session before starting a new MFA-capable authentication flow.
+     * @returns True if the existing session brought iCloud Photos to readiness, false if fresh authentication is needed
+     */
+    async authenticateExistingSession(): Promise<boolean> {
+        if (!Resources.manager().hasSessionSecret) {
+            return false;
+        }
+
+        Resources.logger(this).info(`Reusing existing iCloud web session`);
+        const readyWait = this.createReadyWait();
+
+        try {
+            if (!await this.setupAccount({emitSessionExpired: false})) {
+                readyWait.cancel();
+                Resources.logger(this).info(`Existing iCloud web session is no longer accepted; falling back to authentication`);
+                return false;
+            }
+
+            return await this.waitForReady(readyWait);
+        } catch (err) {
+            readyWait.cancel();
+            Resources.logger(this).warn(`Unable to reuse existing iCloud web session: ${iCPSError.toiCPSError(err).getDescription()}`);
+            return false;
+        }
     }
 
     /**
@@ -675,7 +722,7 @@ export class iCloud {
      * @emits iCPSEventCloud.PCS_REQUIRED - When the account is setup using ADP and PCS cookies are required
      * @emits iCPSEventCloud.ERROR - When an error occurs - provides iCPSError as argument
      */
-    async setupAccount() {
+    async setupAccount(options: SetupAccountOptions = {}): Promise<boolean> {
         try {
             Resources.logger(this).info(`Setting up iCloud connection`);
 
@@ -689,20 +736,24 @@ export class iCloud {
             if (!Resources.network().applySetupResponse(validatedResponse)) {
                 Resources.logger(this).debug(`PCS required, acquiring...`);
                 Resources.emit(iCPSEventCloud.PCS_REQUIRED);
-                return;
+                return true;
             }
 
             Resources.logger(this).debug(`Account ready`);
             Resources.emit(iCPSEventCloud.ACCOUNT_READY);
+            return true;
         } catch (err) {
             const axiosError = err as AxiosError;
             if (axiosError.isAxiosError && axiosError.response?.status === 421) {
                 Resources.logger(this).debug(`Session token expired, re-acquiring...`);
-                Resources.emit(iCPSEventCloud.SESSION_EXPIRED);
-                return;
+                if (options.emitSessionExpired !== false) {
+                    Resources.emit(iCPSEventCloud.SESSION_EXPIRED);
+                }
+                return false;
             }
 
             Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.ACCOUNT_SETUP).addCause(err));
+            return false;
         }
     }
 
