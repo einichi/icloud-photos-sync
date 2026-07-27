@@ -8,7 +8,7 @@ import {fetchAndLoadStateReturnValue, diffStateReturnValue, convertCPLAssetsRetu
 import {MockedEventManager, MockedNetworkManager, MockedResourceManager, UnknownFunction, prepareResources} from '../_helpers/_general';
 import {AxiosError, AxiosResponse} from 'axios';
 import {SyncEngineHelper} from '../../src/lib/sync-engine/helper';
-import {iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../../src/lib/resources/events-types';
+import {iCPSEventCloud, iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../../src/lib/resources/events-types';
 import {SyncEngine} from '../../src/lib/sync-engine/sync-engine';
 import {iCloud} from '../../src/lib/icloud/icloud';
 import {PhotosLibrary} from '../../src/lib/photos-library/photos-library';
@@ -41,7 +41,8 @@ describe(`Coordination`, () => {
     beforeEach(() => {
         mockedNetworkManager.settleRateLimiter = jest.fn<typeof mockedNetworkManager.settleRateLimiter>();
         mockedNetworkManager.settleCCYLimiter = jest.fn<typeof mockedNetworkManager.settleCCYLimiter>();
-        syncEngine.icloud.setupAccount = jest.fn<typeof syncEngine.icloud.setupAccount>();
+        syncEngine.icloud.setupAccount = jest.fn<typeof syncEngine.icloud.setupAccount>()
+            .mockResolvedValue(true);
         syncEngine.icloud.getReady = jest.fn<typeof syncEngine.icloud.getReady>()
             .mockResolvedValue(true);
         syncEngine.icloud.photos.setup = jest.fn<typeof syncEngine.icloud.photos.setup>()
@@ -119,6 +120,9 @@ describe(`Coordination`, () => {
             expect(mockedNetworkManager.settleRateLimiter).toHaveBeenCalledTimes(3);
             expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(3);
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(3);
+            expect(syncEngine.icloud.setupAccount).toHaveBeenNthCalledWith(1, {emitSessionExpired: false});
+            expect(syncEngine.icloud.setupAccount).toHaveBeenNthCalledWith(2, {emitSessionExpired: false});
+            expect(syncEngine.icloud.setupAccount).toHaveBeenNthCalledWith(3, {emitSessionExpired: false});
             expect(syncEngine.icloud.photos.setup).toHaveBeenCalledTimes(3);
             expect((syncEngine as any).waitForRetryBackoff).toHaveBeenCalledTimes(3);
         });
@@ -159,41 +163,49 @@ describe(`Coordination`, () => {
             expect(mockedNetworkManager.settleRateLimiter).toHaveBeenCalledTimes(1);
             expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.setupAccount).toHaveBeenCalledWith({emitSessionExpired: false});
             expect(syncEngine.icloud.photos.setup).toHaveBeenCalledTimes(1);
             expect((syncEngine as any).waitForRetryBackoff).toHaveBeenCalledWith(2, 30000);
             expect(doneEvent).toHaveBeenCalledTimes(1);
         });
 
-        test(`MFA timeout after retry`, async () => {
+        test(`Does not request MFA when refreshing the existing session is rejected during sync retry`, async () => {
             syncEngine.icloud.getReady = jest.fn<typeof syncEngine.icloud.getReady>()
-                .mockResolvedValue(false);
+                .mockResolvedValue(true);
+            syncEngine.icloud.setupAccount = jest.fn<typeof syncEngine.icloud.setupAccount>()
+                .mockResolvedValueOnce(false);
 
             const error = new Error();
 
             const startEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.START);
             const retryEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.RETRY);
+            const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
             syncEngine.fetchAndLoadState = jest.fn<typeof syncEngine.fetchAndLoadState>()
                 .mockResolvedValue(fetchAndLoadStateReturnValue);
             syncEngine.diffState = jest.fn<typeof syncEngine.diffState>()
                 .mockResolvedValue(diffStateReturnValue);
             syncEngine.writeState = jest.fn<typeof syncEngine.writeState>()
-                .mockRejectedValue(error);
+                .mockRejectedValueOnce(error)
+                .mockResolvedValueOnce();
             const doneEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.DONE);
 
-            await expect(syncEngine.sync()).resolves.toEqual([[], []]);
+            await syncEngine.sync();
 
             expect(startEvent).toHaveBeenCalled();
             expect(retryEvent).toHaveBeenCalledWith(2, expect.objectContaining({message: `Unknown error during sync`}), 30000);
-            expect(syncEngine.fetchAndLoadState).toHaveBeenCalledTimes(1);
-            expect(syncEngine.diffState).toHaveBeenCalledTimes(1);
+            expect(syncEngine.fetchAndLoadState).toHaveBeenCalledTimes(2);
+            expect(syncEngine.diffState).toHaveBeenCalledTimes(2);
             expect(syncEngine.diffState).toHaveBeenNthCalledWith(1, ...fetchAndLoadStateReturnValue);
-            expect(syncEngine.writeState).toHaveBeenCalledTimes(1);
+            expect(syncEngine.writeState).toHaveBeenCalledTimes(2);
             expect(syncEngine.writeState).toHaveBeenNthCalledWith(1, ...diffStateReturnValue);
             expect(mockedNetworkManager.settleRateLimiter).toHaveBeenCalledTimes(1);
             expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(1);
+            expect(syncEngine.icloud.setupAccount).toHaveBeenCalledWith({emitSessionExpired: false});
+            expect(sessionExpiredEvent).not.toHaveBeenCalled();
+            expect(syncEngine.icloud.getReady).not.toHaveBeenCalled();
             expect(syncEngine.icloud.photos.setup).not.toHaveBeenCalled();
-            expect(doneEvent).not.toHaveBeenCalled();
+            expect(doneEvent).toHaveBeenCalledTimes(1);
         });
 
         test(`Continues retrying when refreshing iCloud connection fails`, async () => {

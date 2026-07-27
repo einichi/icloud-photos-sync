@@ -4,7 +4,7 @@ import {Asset} from '../photos-library/model/asset.js';
 import {Album, AlbumType} from '../photos-library/model/album.js';
 import {PLibraryEntities, PLibraryProcessingQueues} from '../photos-library/model/photos-entity.js';
 import {iCPSError} from '../../app/error/error.js';
-import {SYNC_ERR} from '../../app/error/error-codes.js';
+import {AUTH_ERR, SYNC_ERR} from '../../app/error/error-codes.js';
 import {Resources} from '../resources/main.js';
 import {SyncEngineHelper} from './helper.js';
 import {iCPSEventRuntimeWarning, iCPSEventSyncEngine} from '../resources/events-types.js';
@@ -119,10 +119,14 @@ export class SyncEngine {
     private async refreshICloudConnection(failedAttempt: number, retryError: iCPSError): Promise<boolean> {
         Resources.logger(this).debug(`Refreshing iCloud connection...`);
         try {
-            const iCloudReady = this.icloud.getReady();
-            await this.icloud.setupAccount();
-            if (!await iCloudReady) {
-                return false;
+            if (!await this.icloud.setupAccount({emitSessionExpired: false})) {
+                throw new iCPSError(AUTH_ERR.ACCOUNT_SETUP)
+                    .addMessage(`Existing iCloud web session was not accepted during sync retry; not requesting MFA during sync`);
+            }
+
+            if (!await this.icloud.getReady()) {
+                throw new iCPSError(AUTH_ERR.SETUP_TIMEOUT)
+                    .addMessage(`iCloud did not become ready during sync retry; not requesting MFA during sync`);
             }
 
             await this.icloud.photos.setup();
