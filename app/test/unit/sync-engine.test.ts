@@ -45,6 +45,8 @@ describe(`Coordination`, () => {
             .mockResolvedValue(true);
         syncEngine.icloud.getReady = jest.fn<typeof syncEngine.icloud.getReady>()
             .mockResolvedValue(true);
+        syncEngine.icloud.refreshSessionWithStoredTrustToken = jest.fn<typeof syncEngine.icloud.refreshSessionWithStoredTrustToken>()
+            .mockResolvedValue(true);
         syncEngine.icloud.photos.setup = jest.fn<typeof syncEngine.icloud.photos.setup>()
             .mockResolvedValue();
         (syncEngine as any).getRetryBackoffMs = jest.fn()
@@ -169,17 +171,20 @@ describe(`Coordination`, () => {
             expect(doneEvent).toHaveBeenCalledTimes(1);
         });
 
-        test(`Does not request MFA when refreshing the existing session is rejected during sync retry`, async () => {
+        test(`Uses stored trust token refresh when existing session is rejected during sync retry`, async () => {
             syncEngine.icloud.getReady = jest.fn<typeof syncEngine.icloud.getReady>()
                 .mockResolvedValue(true);
             syncEngine.icloud.setupAccount = jest.fn<typeof syncEngine.icloud.setupAccount>()
                 .mockResolvedValueOnce(false);
+            syncEngine.icloud.refreshSessionWithStoredTrustToken = jest.fn<typeof syncEngine.icloud.refreshSessionWithStoredTrustToken>()
+                .mockResolvedValueOnce(true);
 
             const error = new Error();
 
             const startEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.START);
             const retryEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.RETRY);
             const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
+            const mfaRequiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.MFA_REQUIRED);
             syncEngine.fetchAndLoadState = jest.fn<typeof syncEngine.fetchAndLoadState>()
                 .mockResolvedValue(fetchAndLoadStateReturnValue);
             syncEngine.diffState = jest.fn<typeof syncEngine.diffState>()
@@ -202,10 +207,39 @@ describe(`Coordination`, () => {
             expect(mockedNetworkManager.settleCCYLimiter).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledWith({emitSessionExpired: false});
+            expect(syncEngine.icloud.refreshSessionWithStoredTrustToken).toHaveBeenCalledTimes(1);
             expect(sessionExpiredEvent).not.toHaveBeenCalled();
+            expect(mfaRequiredEvent).not.toHaveBeenCalled();
             expect(syncEngine.icloud.getReady).not.toHaveBeenCalled();
-            expect(syncEngine.icloud.photos.setup).not.toHaveBeenCalled();
+            expect(syncEngine.icloud.photos.setup).toHaveBeenCalledTimes(1);
             expect(doneEvent).toHaveBeenCalledTimes(1);
+        });
+
+        test(`Does not request MFA when stored trust token refresh is unavailable during sync retry`, async () => {
+            syncEngine.icloud.setupAccount = jest.fn<typeof syncEngine.icloud.setupAccount>()
+                .mockResolvedValueOnce(false);
+            syncEngine.icloud.refreshSessionWithStoredTrustToken = jest.fn<typeof syncEngine.icloud.refreshSessionWithStoredTrustToken>()
+                .mockResolvedValueOnce(false);
+
+            const error = new Error();
+
+            const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
+            const mfaRequiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.MFA_REQUIRED);
+            syncEngine.fetchAndLoadState = jest.fn<typeof syncEngine.fetchAndLoadState>()
+                .mockResolvedValue(fetchAndLoadStateReturnValue);
+            syncEngine.diffState = jest.fn<typeof syncEngine.diffState>()
+                .mockResolvedValue(diffStateReturnValue);
+            syncEngine.writeState = jest.fn<typeof syncEngine.writeState>()
+                .mockRejectedValueOnce(error)
+                .mockResolvedValueOnce();
+
+            await syncEngine.sync();
+
+            expect(syncEngine.icloud.setupAccount).toHaveBeenCalledWith({emitSessionExpired: false});
+            expect(syncEngine.icloud.refreshSessionWithStoredTrustToken).toHaveBeenCalledTimes(1);
+            expect(sessionExpiredEvent).not.toHaveBeenCalled();
+            expect(mfaRequiredEvent).not.toHaveBeenCalled();
+            expect(syncEngine.icloud.photos.setup).not.toHaveBeenCalled();
         });
 
         test(`Continues retrying when refreshing iCloud connection fails`, async () => {

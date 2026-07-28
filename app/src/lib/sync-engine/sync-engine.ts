@@ -114,14 +114,20 @@ export class SyncEngine {
      * Refreshes the iCloud account/session and Photos service state before a retry.
      * @param failedAttempt - The sync attempt that triggered this recovery
      * @param retryError - The aggregate retry error to annotate if recovery fails
-     * @returns False if MFA timed out while recovering, true otherwise
+     * @returns False if non-interactive session refresh cannot start, true otherwise
      */
     private async refreshICloudConnection(failedAttempt: number, retryError: iCPSError): Promise<boolean> {
         Resources.logger(this).debug(`Refreshing iCloud connection...`);
         try {
             if (!await this.icloud.setupAccount({emitSessionExpired: false})) {
-                throw new iCPSError(AUTH_ERR.ACCOUNT_SETUP)
-                    .addMessage(`Existing iCloud web session was not accepted during sync retry; not requesting MFA during sync`);
+                Resources.logger(this).info(`Existing iCloud web session was not accepted during sync retry; refreshing using stored trust token`);
+                if (!await this.icloud.refreshSessionWithStoredTrustToken()) {
+                    throw new iCPSError(AUTH_ERR.ACCOUNT_SETUP)
+                        .addMessage(`Existing iCloud web session was not accepted during sync retry and no stored trust token is available; not requesting MFA during sync`);
+                }
+
+                await this.icloud.photos.setup();
+                return true;
             }
 
             if (!await this.icloud.getReady()) {

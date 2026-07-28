@@ -20,6 +20,10 @@ type SetupAccountOptions = {
     emitSessionExpired?: boolean,
 }
 
+type GetTokensOptions = {
+    emitTrustedEvent?: boolean,
+}
+
 /**
  * This class holds the iCloud connection
  */
@@ -236,27 +240,7 @@ export class iCloud {
             // Does not seem to work
             // if (err instanceof AxiosError) {
             if ((err as AxiosError).isAxiosError) {
-                const status = (err as AxiosError).response?.status;
-                switch (status) {
-                case 401:
-                    Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.UNAUTHORIZED).addCause(err));
-                    break;
-                case 403:
-                    Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.FORBIDDEN)
-                        .addMessage(`Apple returned HTTP 403; this can mean invalid credentials, account security state, or a rejected web-auth request`)
-                        .addMessage(`Rejected endpoint: ${this.describeAxiosRequest(err as AxiosError)}`)
-                        .addMessage(`Response body: ${this.describeAxiosResponseData(err as AxiosError)}`)
-                        .addMessage(this.retriedAuthenticationWithoutTrustToken ? `Stored trust token retry: failed without stored trust token` : `Stored trust token retry: not attempted`)
-                        .addContext(`status`, status)
-                        .addCause(err));
-                    break;
-                case 412:
-                    Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.PRECONDITION_FAILED).addCause(err));
-                    break;
-                default:
-                    Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.UNEXPECTED_RESPONSE).addCause(err));
-                }
-
+                Resources.emit(iCPSEventCloud.ERROR, this.buildAuthenticationError(err as AxiosError));
                 return;
             }
 
@@ -272,12 +256,91 @@ export class iCloud {
         }
     }
 
+    /**
+     * Refreshes the Apple web-auth session using only the stored trust token.
+     * This path is intended for mid-sync recovery and must not start MFA.
+     * @returns True if the account reached Photos readiness, false if no stored trust token is available
+     * @throws An iCPSError when the stored token is rejected or the refreshed session cannot be set up
+     */
+    async refreshSessionWithStoredTrustToken(): Promise<boolean> {
+        const trustToken = Resources.manager().trustToken;
+        if (!trustToken) {
+            Resources.logger(this).warn(`Cannot refresh iCloud web session non-interactively: no stored iCloud trust token available`);
+            return false;
+        }
+
+        const readyWait = this.createReadyWait();
+        this.currentAuthenticationTrustToken = trustToken;
+        this.hasCurrentAuthenticationTrustToken = true;
+        this.retriedAuthenticationWithoutTrustToken = false;
+
+        Resources.logger(this).info(`Refreshing iCloud web session using stored trust token`);
+
+        const config: AxiosRequestConfig = {
+            params: {
+                isRememberMeEnabled: `true`,
+            },
+            validateStatus: status => status === 409 || status === 200,
+        };
+
+        try {
+            const response = await this.performSignin(config);
+            const validatedResponse = Resources.validator().validateSigninResponse(response);
+            Resources.network().applySigninResponse(validatedResponse);
+
+            if (response.status === 409) {
+                throw new iCPSError(AUTH_ERR.ACCOUNT_SETUP)
+                    .addMessage(`Stored trust token was not accepted and MFA would be required; not requesting MFA during sync`);
+            }
+
+            await this.acquireTrustTokens({emitTrustedEvent: false});
+
+            if (!await this.setupAccount({emitSessionExpired: false})) {
+                throw new iCPSError(AUTH_ERR.ACCOUNT_SETUP)
+                    .addMessage(`Refreshed iCloud web session was not accepted during sync retry`);
+            }
+
+            return await this.waitForReady(readyWait);
+        } catch (err) {
+            readyWait.cancel();
+            if ((err as AxiosError).isAxiosError) {
+                throw this.buildAuthenticationError(err as AxiosError);
+            }
+
+            throw err;
+        } finally {
+            this.currentAuthenticationTrustToken = undefined;
+            this.hasCurrentAuthenticationTrustToken = false;
+            this.retriedAuthenticationWithoutTrustToken = false;
+        }
+    }
+
     private async performSignin(config: AxiosRequestConfig, includeTrustToken: boolean = true) {
         const [url, data] = Resources.manager().legacyLogin
             ? this.getLegacyLogin(includeTrustToken)
             : await this.getSRPLogin(undefined, includeTrustToken);
 
         return Resources.network().post(url, data, config);
+    }
+
+    private buildAuthenticationError(err: AxiosError): iCPSError {
+        const status = err.response?.status;
+        switch (status) {
+        case 401:
+            return new iCPSError(AUTH_ERR.UNAUTHORIZED).addCause(err);
+        case 403:
+            return new iCPSError(AUTH_ERR.FORBIDDEN)
+                .addMessage(`Apple returned HTTP 403; this can mean invalid credentials, account security state, or a rejected web-auth request`)
+                .addMessage(`Rejected endpoint: ${this.describeAxiosRequest(err)}`)
+                .addMessage(`Response body: ${this.describeAxiosResponseData(err)}`)
+                .addMessage(this.retriedAuthenticationWithoutTrustToken ? `Stored trust token retry: failed without stored trust token` : `Stored trust token retry: not attempted`)
+                .addContext(`status`, status)
+                .addCause(err);
+        case 412:
+            return new iCPSError(AUTH_ERR.PRECONDITION_FAILED).addCause(err);
+        default:
+            return new iCPSError(AUTH_ERR.UNEXPECTED_RESPONSE).addCause(err);
+        }
     }
 
     private shouldRetrySigninWithoutTrustToken(err: unknown, trustToken?: string): boolean {
@@ -697,21 +760,27 @@ export class iCloud {
      */
     async getTokens() {
         try {
-            Resources.logger(this).info(`Trusting device and acquiring trust tokens`);
-
-            const url = ENDPOINTS.AUTH.BASE + ENDPOINTS.AUTH.PATH.TRUST;
-            const config: AxiosRequestConfig = {
-                validateStatus: status => status === 204,
-            };
-
-            const response = await Resources.network().get(url, config);
-            const validatedResponse = Resources.validator().validateTrustResponse(response);
-            Resources.network().applyTrustResponse(validatedResponse);
-
-            Resources.logger(this).debug(`Acquired account tokens`);
-            Resources.emit(iCPSEventCloud.TRUSTED, Resources.manager().trustToken);
+            await this.acquireTrustTokens();
         } catch (err) {
             Resources.emit(iCPSEventCloud.ERROR, new iCPSError(AUTH_ERR.ACQUIRE_ACCOUNT_TOKENS).addCause(err));
+        }
+    }
+
+    private async acquireTrustTokens(options: GetTokensOptions = {}) {
+        Resources.logger(this).info(`Trusting device and acquiring trust tokens`);
+
+        const url = ENDPOINTS.AUTH.BASE + ENDPOINTS.AUTH.PATH.TRUST;
+        const config: AxiosRequestConfig = {
+            validateStatus: status => status === 204,
+        };
+
+        const response = await Resources.network().get(url, config);
+        const validatedResponse = Resources.validator().validateTrustResponse(response);
+        Resources.network().applyTrustResponse(validatedResponse);
+
+        Resources.logger(this).debug(`Acquired account tokens`);
+        if (options.emitTrustedEvent !== false) {
+            Resources.emit(iCPSEventCloud.TRUSTED, Resources.manager().trustToken);
         }
     }
 

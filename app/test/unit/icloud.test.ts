@@ -1112,6 +1112,91 @@ describe.each([
             expect(sessionExpiredEvent).not.toHaveBeenCalled();
         });
 
+        test(`Stored trust token refresh is skipped when no trust token is available`, async () => {
+            mockedResourceManager._readResourceFile.mockReturnValue({
+                libraryVersion: 1,
+                trustToken: undefined,
+            });
+
+            const mfaEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.MFA_REQUIRED);
+            const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
+
+            await expect(icloud.refreshSessionWithStoredTrustToken()).resolves.toBeFalsy();
+
+            expect(mfaEvent).not.toHaveBeenCalled();
+            expect(sessionExpiredEvent).not.toHaveBeenCalled();
+        });
+
+        test(`Stored trust token refresh does not emit MFA when Apple requires MFA`, async () => {
+            mockedResourceManager._readResourceFile.mockReturnValue({
+                libraryVersion: 1,
+                trustToken: Config.trustToken,
+            });
+            const authenticationUrl = `https://idmsa.apple.com/appleauth/auth/signin/complete`;
+            const authenticationPayload = {
+                accountName: Config.defaultConfig.username,
+                trustTokens: [Config.trustToken],
+            };
+            icloud.getSRPLogin = jest.fn<typeof icloud.getSRPLogin>()
+                .mockResolvedValue([authenticationUrl, authenticationPayload]);
+            mockedValidator.validateSigninResponse = jest.fn<typeof mockedValidator.validateSigninResponse>();
+            mockedNetworkManager.applySigninResponse = jest.fn<typeof mockedNetworkManager.applySigninResponse>();
+
+            mockedNetworkManager.mock
+                .onPost(authenticationUrl, authenticationPayload, {headers: Config.REQUEST_HEADER.AUTH})
+                .reply(409);
+
+            const mfaEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.MFA_REQUIRED);
+            const trustedEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.TRUSTED);
+
+            await expect(icloud.refreshSessionWithStoredTrustToken()).rejects.toThrow(/^Unable to setup iCloud Account/);
+
+            expect(mfaEvent).not.toHaveBeenCalled();
+            expect(trustedEvent).not.toHaveBeenCalled();
+            expect(icloud.getSRPLogin).toHaveBeenCalledWith(undefined, true);
+            expect(mockedNetworkManager.applySigninResponse).toHaveBeenCalled();
+        });
+
+        test(`Stored trust token refresh reaches readiness without emitting trusted lifecycle event`, async () => {
+            mockedResourceManager._readResourceFile.mockReturnValue({
+                libraryVersion: 1,
+                trustToken: Config.trustToken,
+            });
+            const authenticationUrl = `https://idmsa.apple.com/appleauth/auth/signin/complete`;
+            const authenticationPayload = {
+                accountName: Config.defaultConfig.username,
+                trustTokens: [Config.trustToken],
+            };
+            icloud.getSRPLogin = jest.fn<typeof icloud.getSRPLogin>()
+                .mockResolvedValue([authenticationUrl, authenticationPayload]);
+            mockedValidator.validateSigninResponse = jest.fn<typeof mockedValidator.validateSigninResponse>();
+            mockedNetworkManager.applySigninResponse = jest.fn<typeof mockedNetworkManager.applySigninResponse>();
+            mockedNetworkManager.get = jest.fn<typeof mockedNetworkManager.get>()
+                .mockResolvedValue({} as never);
+            mockedValidator.validateTrustResponse = jest.fn<typeof mockedValidator.validateTrustResponse>();
+            mockedNetworkManager.applyTrustResponse = jest.fn<typeof mockedNetworkManager.applyTrustResponse>();
+            icloud.setupAccount = jest.fn<typeof icloud.setupAccount>(async () => {
+                mockedEventManager.emit(iCPSEventPhotos.READY);
+                return true;
+            });
+
+            mockedNetworkManager.mock
+                .onPost(authenticationUrl, authenticationPayload, {headers: Config.REQUEST_HEADER.AUTH})
+                .reply(200);
+
+            const mfaEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.MFA_REQUIRED);
+            const trustedEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.TRUSTED);
+
+            await expect(icloud.refreshSessionWithStoredTrustToken()).resolves.toBeTruthy();
+
+            expect(mfaEvent).not.toHaveBeenCalled();
+            expect(trustedEvent).not.toHaveBeenCalled();
+            expect(mockedNetworkManager.get).toHaveBeenCalledWith(`https://idmsa.apple.com/appleauth/auth/2sv/trust`, {
+                validateStatus: expect.any(Function),
+            });
+            expect(icloud.setupAccount).toHaveBeenCalledWith({emitSessionExpired: false});
+        });
+
         test(`Success`, async () => {
             mockedNetworkManager.sessionToken = Config.iCloudAuthSecrets.sessionSecret;
             mockedResourceManager._resources.trustToken = Config.trustToken;
