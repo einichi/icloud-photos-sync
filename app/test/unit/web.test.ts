@@ -619,8 +619,8 @@ describe.each([
             expect(reauthEvent).toHaveBeenCalled();
         })
 
-        test(`Clears stale trust token before authenticating with submitted credentials`, async () => {
-            mockedResourceManager._resources.trustToken = `staleTrustToken`;
+        test(`Preserves stored trust token when authenticating with submitted credentials`, async () => {
+            mockedResourceManager._resources.trustToken = `storedTrustToken`;
             const req = createRequest<IncomingMessage>({
                 method: `POST`,
                 url: `${webBasePath}/api/credentials`,
@@ -633,8 +633,8 @@ describe.each([
             const res = await sendMockedRequest(webServer, req)
 
             expect(res._getStatusCode()).toBe(200);
-            expect(mockedResourceManager._resources.trustToken).toBeUndefined();
-            expect(mockedResourceManager._writeResourceFile).toHaveBeenCalled();
+            expect(mockedResourceManager._resources.trustToken).toEqual(`storedTrustToken`);
+            expect(mockedResourceManager._writeResourceFile).not.toHaveBeenCalled();
             expect(webServer.triggerReauth).toHaveBeenCalled();
         })
 

@@ -492,7 +492,6 @@ export class WebServer {
         }
 
         Resources.emit(iCPSEventWebServer.REAUTH_REQUESTED);
-        this.clearStoredTrustTokenForReauth();
         this.triggerReauth()
             .catch(err => {
                 Resources.emit(iCPSEventWebServer.REAUTH_ERROR, iCPSError.toiCPSError(err));
