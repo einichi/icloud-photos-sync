@@ -253,11 +253,19 @@ export class TokenApp extends iCloudApp {
             // Making sure execution stops after TRUSTED event, by removing existing listeners
             Resources.events(this.icloud).removeListeners(iCPSEventCloud.TRUSTED);
 
+            let tokenEmitted = false;
             Resources.events(this).once(iCPSEventCloud.TRUSTED, token => {
+                tokenEmitted = true;
                 Resources.emit(iCPSEventPhotos.READY);
                 Resources.emit(iCPSEventApp.TOKEN, token);
             });
-            return await super.run();
+
+            const ready = await super.run({reuseExistingSession: true});
+            if (ready && !tokenEmitted) {
+                Resources.emit(iCPSEventApp.TOKEN, Resources.manager().trustToken);
+            }
+
+            return ready;
         } catch (err) {
             throw new iCPSError(APP_ERR.TOKEN)
                 .addCause(err);

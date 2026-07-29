@@ -555,6 +555,23 @@ export class ResourceManager {
      */
     set sessionSecret(sessionSecret: string) {
         this._resources.sessionSecret = sessionSecret;
+        this._writeResourceFile();
+    }
+
+    /**
+     * @returns Persisted Apple web-auth cookies
+     */
+    get sessionCookies(): string[] {
+        return this._resources.sessionCookies ?? [];
+    }
+
+    /**
+     * Sets persisted Apple web-auth cookies
+     * @param sessionCookies - The cookies to persist
+     */
+    set sessionCookies(sessionCookies: string[]) {
+        this._resources.sessionCookies = sessionCookies.length > 0 ? sessionCookies : undefined;
+        this._writeResourceFile();
     }
 
     /**

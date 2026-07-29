@@ -62,6 +62,14 @@ export type ResourceFile = {
      */
     trustTokenCreatedAt?: number,
     /**
+     * Active Apple web-auth session token.
+     */
+    sessionSecret?: string,
+    /**
+     * Active Apple web-auth cookies.
+     */
+    sessionCookies?: string[],
+    /**
      * The notification vapid credentials used to send push notifications
      */
     notificationVapidCredentials?: {
@@ -78,13 +86,9 @@ export type ResourceFile = {
 }
 
 /**
- * Non persistent network resources, required to access the iCloud API
+ * Runtime-only network resources, required to access the iCloud API
  */
 type NetworkResources = {
-    /**
-     * Session secret, either acquired on successful sign in, or after trusting the device
-     */
-    sessionSecret?: string,
     /**
      * Complete Apple ID credentials were supplied when the process started.
      */

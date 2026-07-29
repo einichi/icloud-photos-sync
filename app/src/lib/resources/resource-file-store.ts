@@ -60,6 +60,8 @@ export class ResourceFileStore {
             libraryVersion: resources.libraryVersion,
             trustToken: resources.trustToken,
             trustTokenCreatedAt: resources.trustTokenCreatedAt,
+            sessionSecret: resources.sessionSecret,
+            sessionCookies: resources.sessionCookies,
             notificationVapidCredentials: resources.notificationVapidCredentials,
             notificationSubscriptions: resources.notificationSubscriptions
         };

@@ -23,8 +23,12 @@ describe(`Validator`, () => {
                 data: {
                     libraryVersion: 1,
                     trustToken: `someToken`,
+                    sessionSecret: `someSessionSecret`,
+                    sessionCookies: [
+                        `X-APPLE-WEBAUTH-TOKEN=someToken; Path=/; Domain=.icloud.com; Secure; HttpOnly`,
+                    ],
                 },
-                desc: `libraryVersion and trustToken`,
+                desc: `libraryVersion, trustToken and saved web session`,
             }, {
                 data: {
                     libraryVersion: 1,

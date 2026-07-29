@@ -305,6 +305,34 @@ describe(`App control flow`, () => {
 
             expect(tokenEvent).toHaveBeenCalledTimes(1);
         });
+
+        test(`Reuses existing web-auth session before starting token authentication`, async () => {
+            const tokenApp = await appFactory(validOptions.token) as TokenApp;
+            Resources.manager()._resources.trustToken = Config.trustToken;
+
+            const tokenEvent = spyOnEvent(Resources._instances.event._eventBus, iCPSEventApp.TOKEN);
+
+            tokenApp.acquireLibraryLock = jest.fn<typeof tokenApp.acquireLibraryLock>()
+                .mockResolvedValue();
+            tokenApp.icloud.authenticateExistingSession = jest.fn<typeof tokenApp.icloud.authenticateExistingSession>()
+                .mockResolvedValue(true);
+            tokenApp.icloud.authenticate = jest.fn<typeof tokenApp.icloud.authenticate>()
+                .mockResolvedValue(true);
+            tokenApp.icloud.logout = jest.fn<typeof tokenApp.icloud.logout>()
+                .mockResolvedValue();
+            tokenApp.releaseLibraryLock = jest.fn<typeof tokenApp.releaseLibraryLock>()
+                .mockResolvedValue();
+            Resources._instances.network.resetSession = jest.fn<typeof Resources._instances.network.resetSession>()
+                .mockResolvedValue();
+            Resources._instances.event.removeListenersFromRegistry = jest.fn<typeof Resources._instances.event.removeListenersFromRegistry>()
+                .mockReturnValue(Resources._instances.event);
+
+            await expect(tokenApp.run()).resolves.toBeTruthy();
+
+            expect(tokenApp.icloud.authenticateExistingSession).toHaveBeenCalledTimes(1);
+            expect(tokenApp.icloud.authenticate).not.toHaveBeenCalled();
+            expect(tokenEvent).toHaveBeenCalledWith(Config.trustToken);
+        });
     });
 
     describe(`Sync App`, () => {

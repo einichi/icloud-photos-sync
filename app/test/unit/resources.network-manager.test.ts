@@ -429,6 +429,16 @@ describe(`NetworkManager`, () => {
             expect(networkManager._downloadTimeoutMs).toEqual(1000 * 60 * 10);
         });
 
+        test(`Restores persisted session cookies`, () => {
+            Resources.manager()._resources.sessionCookies = [
+                `X-APPLE-WEBAUTH-TOKEN=someToken; Path=/; Domain=.icloud.com; Secure; HttpOnly`,
+            ];
+
+            const networkManager = new NetworkManager(defaultConfig);
+
+            expect(networkManager._headerJar.cookies.get(`X-APPLE-WEBAUTH-TOKEN`)?.value).toEqual(`someToken`);
+        });
+
         test(`Creates a new instance with network capture enabled`, () => {
             const networkManager = new NetworkManager({
                 ...defaultConfig,
@@ -719,9 +729,12 @@ describe(`NetworkManager`, () => {
             });
 
             test(`set session token`, () => {
+                Resources.manager()._writeResourceFile = jest.fn<() => void>();
+
                 networkManager.sessionToken = `someSessionId`;
                 expect(Resources.manager()._resources.sessionSecret).toEqual(`someSessionId`);
                 expect(networkManager._headerJar.headers.has(`X-Apple-ID-Session-Id`)).toBeFalsy();
+                expect(Resources.manager()._writeResourceFile).toHaveBeenCalled();
             });
 
             test(`set photos url`, () => {
@@ -732,6 +745,7 @@ describe(`NetworkManager`, () => {
 
         describe(`Apply methods`, () => {
             test(`Apply SigninResponse`, () => {
+                Resources.manager()._writeResourceFile = jest.fn<() => void>();
                 const signinResponse = {
                     data: {
                         authType: `hsa2`,
@@ -748,6 +762,27 @@ describe(`NetworkManager`, () => {
 
                 expect(Resources.manager()._resources.sessionSecret).toEqual(`someSessionToken`);
                 expect(networkManager._headerJar.headers.get(`X-Apple-ID-Session-Id`)!.value).toEqual(`someSessionId`);
+                expect(Resources.manager()._writeResourceFile).toHaveBeenCalled();
+            });
+
+            test(`Persists extracted session cookies`, () => {
+                Resources.manager()._writeResourceFile = jest.fn<() => void>();
+
+                networkManager._headerJar._extractHeaders({
+                    config: {
+                        url: `https://setup.icloud.com/setup/ws/1/accountLogin`,
+                    },
+                    headers: {
+                        'set-cookie': [
+                            `X-APPLE-WEBAUTH-TOKEN=someToken; Path=/; Domain=.icloud.com; Secure; HttpOnly`,
+                        ],
+                    },
+                } as any);
+
+                expect(Resources.manager()._resources.sessionCookies).toEqual([
+                    `X-APPLE-WEBAUTH-TOKEN=someToken; Domain=icloud.com; Path=/; Secure; HttpOnly`,
+                ]);
+                expect(Resources.manager()._writeResourceFile).toHaveBeenCalled();
             });
 
             test(`Apply TrustResponse`, () => {

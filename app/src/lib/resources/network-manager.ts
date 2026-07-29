@@ -146,6 +146,7 @@ export class HeaderJar {
                 Resources.logger(this).debug(`Extracted cookie from response header: ${parsedCookie.key} (domain ${parsedCookie.domain}) with length ${parsedCookie.value.length}`);
                 this.setCookie(parsedCookie);
             });
+            Resources.manager().sessionCookies = this.getCookieStrings();
         }
 
         return response;
@@ -214,6 +215,24 @@ export class HeaderJar {
         this.clearHeader(HEADER_KEYS.AUTH_ATTRIBUTES);
         this.clearHeader(HEADER_KEYS.OAUTH_STATE);
         this.clearHeader(HEADER_KEYS.FRAME_ID);
+    }
+
+    /**
+     * Loads cookies from serialized Set-Cookie strings.
+     * @param cookies - Serialized cookie strings
+     */
+    loadCookieStrings(cookies: string[]) {
+        this.setCookie(...cookies);
+    }
+
+    /**
+     * Gets serialized, non-expired cookies.
+     * @returns Serialized cookie strings
+     */
+    getCookieStrings(): string[] {
+        return Array.from(this.cookies.values())
+            .filter(cookie => this.isNotExpired(cookie))
+            .map(cookie => cookie.toString());
     }
 
     /**
@@ -294,6 +313,7 @@ export class NetworkManager {
         }
 
         this._headerJar = new HeaderJar(this._axios);
+        this._headerJar.loadCookieStrings(Resources.manager().sessionCookies);
 
         this._streamingCCYLimiter = new PQueue({
             concurrency: resources.downloadThreads,
