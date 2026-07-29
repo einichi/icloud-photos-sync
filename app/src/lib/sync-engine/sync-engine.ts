@@ -138,10 +138,24 @@ export class SyncEngine {
             await this.icloud.photos.setup();
         } catch (refreshErr) {
             retryError.addContext(`error-try-${failedAttempt}-refresh`, this.getRetryErrorContext(refreshErr));
+            if (this.requiresInteractiveAuthentication(refreshErr)) {
+                throw new iCPSError(AUTH_ERR.FAILED)
+                    .addCause(iCPSError.toiCPSError(refreshErr));
+            }
+
             Resources.logger(this).warn(`Unable to refresh iCloud connection before retry: ${iCPSError.toiCPSError(refreshErr).getDescription()}`);
         }
 
         return true;
+    }
+
+    /**
+     * Determines whether retry recovery reached a point that requires user MFA.
+     * @param err - The refresh error
+     * @returns True if continuing non-interactively cannot succeed
+     */
+    private requiresInteractiveAuthentication(err: unknown): boolean {
+        return iCPSError.toiCPSError(err).getRootErrorCode(true) === AUTH_ERR.MFA_REQUIRED.code;
     }
 
     /**

@@ -10,7 +10,7 @@ import {Stream} from 'stream';
 import {Cookie} from 'tough-cookie';
 import {Resources} from '../../src/lib/resources/main';
 import {Header, HeaderJar, NetworkManager} from "../../src/lib/resources/network-manager";
-import {PhotosSetupResponseZone, SetupResponse, SigninResponse, TrustResponse} from '../../src/lib/resources/network-types';
+import {HEADER_KEYS, PhotosSetupResponseZone, SetupResponse, SigninResponse, TrustResponse} from '../../src/lib/resources/network-types';
 import * as Config from '../_helpers/_config';
 import {defaultConfig} from '../_helpers/_config';
 import {addHoursToCurrentDate, getDateInThePast, prepareResources} from '../_helpers/_general';
@@ -377,6 +377,30 @@ describe(`HeaderJar`, () => {
             expect(injectedRequestConfig.headers).toEqual({
                 someOtherKey: `someOtherValue`,
             });
+        });
+
+        test(`Clears transient Apple auth session headers`, () => {
+            const axiosInstance = axios.create();
+            const headerJar = new HeaderJar(axiosInstance);
+            headerJar.headers.clear();
+
+            headerJar.setHeader(
+                new Header(`idmsa.apple.com`, HEADER_KEYS.SCNT, `scnt`),
+                new Header(`idmsa.apple.com`, HEADER_KEYS.SESSION_ID, `session`),
+                new Header(`idmsa.apple.com`, HEADER_KEYS.AUTH_ATTRIBUTES, `attributes`),
+                new Header(`idmsa.apple.com`, HEADER_KEYS.OAUTH_STATE, `state`),
+                new Header(`idmsa.apple.com`, HEADER_KEYS.FRAME_ID, `frame`),
+                new Header(`idmsa.apple.com`, `X-Apple-Widget-Key`, `widget`),
+            );
+
+            headerJar.clearAppleAuthSessionHeaders();
+
+            expect(headerJar.headers.has(HEADER_KEYS.SCNT)).toBeFalsy();
+            expect(headerJar.headers.has(HEADER_KEYS.SESSION_ID)).toBeFalsy();
+            expect(headerJar.headers.has(HEADER_KEYS.AUTH_ATTRIBUTES)).toBeFalsy();
+            expect(headerJar.headers.has(HEADER_KEYS.OAUTH_STATE)).toBeFalsy();
+            expect(headerJar.headers.has(HEADER_KEYS.FRAME_ID)).toBeFalsy();
+            expect(headerJar.headers.get(`X-Apple-Widget-Key`)?.value).toEqual(`widget`);
         });
     });
 });

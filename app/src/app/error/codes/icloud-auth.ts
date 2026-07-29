@@ -35,6 +35,10 @@ export const ACCOUNT_SETUP: ErrorStruct = buildErrorStruct(
     name, prefix, `ACCOUNT_SETUP`, `Unable to setup iCloud Account`,
 );
 
+export const MFA_REQUIRED: ErrorStruct = buildErrorStruct(
+    name, prefix, `MFA_REQUIRED`, `Apple requires MFA to continue authentication`,
+);
+
 export const SETUP_TIMEOUT: ErrorStruct = buildErrorStruct(
     name, prefix, `SETUP_TIMEOUT`, `iCloud setup did not complete successfully within expected amount of time`,
 );

@@ -13,7 +13,7 @@ import {SyncEngine} from '../../src/lib/sync-engine/sync-engine';
 import {iCloud} from '../../src/lib/icloud/icloud';
 import {PhotosLibrary} from '../../src/lib/photos-library/photos-library';
 import {iCPSError} from '../../src/app/error/error';
-import {ICLOUD_PHOTOS_ERR, RESOURCES_ERR, SYNC_ERR} from '../../src/app/error/error-codes';
+import {AUTH_ERR, ICLOUD_PHOTOS_ERR, RESOURCES_ERR, SYNC_ERR} from '../../src/app/error/error-codes';
 
 let mockedResourceManager: MockedResourceManager;
 let mockedEventManager: MockedEventManager;
@@ -235,6 +235,39 @@ describe(`Coordination`, () => {
 
             await syncEngine.sync();
 
+            expect(syncEngine.icloud.setupAccount).toHaveBeenCalledWith({emitSessionExpired: false});
+            expect(syncEngine.icloud.refreshSessionWithStoredTrustToken).toHaveBeenCalledTimes(1);
+            expect(sessionExpiredEvent).not.toHaveBeenCalled();
+            expect(mfaRequiredEvent).not.toHaveBeenCalled();
+            expect(syncEngine.icloud.photos.setup).not.toHaveBeenCalled();
+        });
+
+        test(`Stops retrying when stored trust token refresh requires MFA during sync retry`, async () => {
+            mockedResourceManager._resources.maxRetries = 4;
+            syncEngine.icloud.setupAccount = jest.fn<typeof syncEngine.icloud.setupAccount>()
+                .mockResolvedValueOnce(false);
+            syncEngine.icloud.refreshSessionWithStoredTrustToken = jest.fn<typeof syncEngine.icloud.refreshSessionWithStoredTrustToken>()
+                .mockRejectedValueOnce(new iCPSError(AUTH_ERR.MFA_REQUIRED)
+                    .addMessage(`Stored trust token was not accepted; not requesting MFA during sync`));
+
+            const error = new AxiosError(`Invalid global session`, `ERR_BAD_REQUEST`, undefined, undefined, {status: 421} as AxiosResponse);
+
+            const retryEvent = mockedEventManager.spyOnEvent(iCPSEventSyncEngine.RETRY);
+            const sessionExpiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.SESSION_EXPIRED);
+            const mfaRequiredEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.MFA_REQUIRED);
+            syncEngine.fetchAndLoadState = jest.fn<typeof syncEngine.fetchAndLoadState>()
+                .mockResolvedValue(fetchAndLoadStateReturnValue);
+            syncEngine.diffState = jest.fn<typeof syncEngine.diffState>()
+                .mockResolvedValue(diffStateReturnValue);
+            syncEngine.writeState = jest.fn<typeof syncEngine.writeState>()
+                .mockRejectedValue(error);
+
+            await expect(syncEngine.sync()).rejects.toThrow(/^iCloud Authentication failed$/);
+
+            expect(retryEvent).toHaveBeenCalledTimes(1);
+            expect(syncEngine.fetchAndLoadState).toHaveBeenCalledTimes(1);
+            expect(syncEngine.diffState).toHaveBeenCalledTimes(1);
+            expect(syncEngine.writeState).toHaveBeenCalledTimes(1);
             expect(syncEngine.icloud.setupAccount).toHaveBeenCalledWith({emitSessionExpired: false});
             expect(syncEngine.icloud.refreshSessionWithStoredTrustToken).toHaveBeenCalledTimes(1);
             expect(sessionExpiredEvent).not.toHaveBeenCalled();

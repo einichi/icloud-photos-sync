@@ -1,6 +1,6 @@
 import { test, afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest} from '@jest/globals';
 import { iCPSError } from '../../src/app/error/error';
-import { MFA_ERR, VALIDATOR_ERR } from '../../src/app/error/error-codes';
+import { AUTH_ERR, MFA_ERR, VALIDATOR_ERR } from '../../src/app/error/error-codes';
 import { iCloud } from '../../src/lib/icloud/icloud';
 import { iCloudPhotos } from '../../src/lib/icloud/icloud-photos/icloud-photos';
 import { iCloudCrypto } from '../../src/lib/icloud/icloud.crypto';
@@ -378,6 +378,7 @@ describe.each([
 	            .onPost(authenticationUrl, retryPayload, {headers: Config.REQUEST_HEADER.AUTH})
 	            .reply(409);
 
+	        mockedNetworkManager.clearAppleAuthSessionHeaders = jest.fn<typeof mockedNetworkManager.clearAppleAuthSessionHeaders>();
 	        const mfaEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.MFA_REQUIRED);
 	        const errorEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.ERROR);
 
@@ -385,6 +386,7 @@ describe.each([
 
 	        expect(icloud.getSRPLogin).toHaveBeenNthCalledWith(1, undefined, true);
 	        expect(icloud.getSRPLogin).toHaveBeenNthCalledWith(2, undefined, false);
+	        expect(mockedNetworkManager.clearAppleAuthSessionHeaders).toHaveBeenCalledTimes(2);
 	        expect(icloud.requestTrustedDeviceMFA).toHaveBeenCalled();
 	        expect(mfaEvent).toHaveBeenCalledWith([]);
 	        expect(errorEvent).not.toHaveBeenCalled();
@@ -1149,10 +1151,12 @@ describe.each([
             const mfaEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.MFA_REQUIRED);
             const trustedEvent = mockedEventManager.spyOnEvent(iCPSEventCloud.TRUSTED);
 
-            await expect(icloud.refreshSessionWithStoredTrustToken()).rejects.toThrow(/^Unable to setup iCloud Account/);
+            const refresh = icloud.refreshSessionWithStoredTrustToken();
+            await expect(refresh).rejects.toThrow(/^Apple requires MFA to continue authentication/);
 
             expect(mfaEvent).not.toHaveBeenCalled();
             expect(trustedEvent).not.toHaveBeenCalled();
+            await expect(refresh).rejects.toHaveProperty(`code`, AUTH_ERR.MFA_REQUIRED.code);
             expect(icloud.getSRPLogin).toHaveBeenCalledWith(undefined, true);
             expect(mockedNetworkManager.applySigninResponse).toHaveBeenCalled();
         });
@@ -1229,6 +1233,8 @@ describe.each([
             mockedNetworkManager.mock
                 .onPost(`https://setup.icloud.com/setup/ws/1/accountLogin`, {
                     dsWebAuthToken: Config.iCloudAuthSecrets.sessionSecret,
+                    extended_login: true,
+                    trustToken: Config.trustToken,
                 }, {
                     headers: Config.REQUEST_HEADER.DEFAULT,
                 })
@@ -1271,6 +1277,8 @@ describe.each([
             mockedNetworkManager.mock
                 .onPost(`https://setup.icloud.com/setup/ws/1/accountLogin`, {
                     dsWebAuthToken: Config.iCloudAuthSecrets.sessionSecret,
+                    extended_login: true,
+                    trustToken: Config.trustToken,
                 }, {
                     headers: Config.REQUEST_HEADER.DEFAULT,
                 })

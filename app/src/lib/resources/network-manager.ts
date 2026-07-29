@@ -206,6 +206,17 @@ export class HeaderJar {
     }
 
     /**
+     * Clears transient Apple ID authentication headers before starting a new sign-in challenge.
+     */
+    clearAppleAuthSessionHeaders() {
+        this.clearHeader(HEADER_KEYS.SCNT);
+        this.clearHeader(HEADER_KEYS.SESSION_ID);
+        this.clearHeader(HEADER_KEYS.AUTH_ATTRIBUTES);
+        this.clearHeader(HEADER_KEYS.OAUTH_STATE);
+        this.clearHeader(HEADER_KEYS.FRAME_ID);
+    }
+
+    /**
      * Sets a cookie object in the header jar - overwrites existing cookies with the same key
      * @param cookie - The cookie to set
      */
@@ -300,11 +311,7 @@ export class NetworkManager {
     async resetSession() {
         this._axios.defaults.baseURL = undefined;
 
-        this._headerJar.clearHeader(HEADER_KEYS.SCNT);
-        this._headerJar.clearHeader(HEADER_KEYS.SESSION_ID);
-        this._headerJar.clearHeader(HEADER_KEYS.AUTH_ATTRIBUTES);
-        this._headerJar.clearHeader(HEADER_KEYS.OAUTH_STATE);
-        this._headerJar.clearHeader(HEADER_KEYS.FRAME_ID);
+        this.clearAppleAuthSessionHeaders();
 
         await this.settleRateLimiter();
         await this.settleCCYLimiter();
@@ -379,6 +386,13 @@ export class NetworkManager {
             Resources.logger(this).error(`Unable to write HAR file: ${err.message}`);
             return false;
         }
+    }
+
+    /**
+     * Clears transient Apple ID authentication headers before starting a new sign-in challenge.
+     */
+    clearAppleAuthSessionHeaders() {
+        this._headerJar.clearAppleAuthSessionHeaders();
     }
 
     /**

@@ -289,8 +289,8 @@ export class iCloud {
             Resources.network().applySigninResponse(validatedResponse);
 
             if (response.status === 409) {
-                throw new iCPSError(AUTH_ERR.ACCOUNT_SETUP)
-                    .addMessage(`Stored trust token was not accepted and MFA would be required; not requesting MFA during sync`);
+                throw new iCPSError(AUTH_ERR.MFA_REQUIRED)
+                    .addMessage(`Stored trust token was not accepted; not requesting MFA during sync`);
             }
 
             await this.acquireTrustTokens({emitTrustedEvent: false});
@@ -316,6 +316,7 @@ export class iCloud {
     }
 
     private async performSignin(config: AxiosRequestConfig, includeTrustToken: boolean = true) {
+        Resources.network().clearAppleAuthSessionHeaders();
         const [url, data] = Resources.manager().legacyLogin
             ? this.getLegacyLogin(includeTrustToken)
             : await this.getSRPLogin(undefined, includeTrustToken);
@@ -798,6 +799,8 @@ export class iCloud {
             const url = ENDPOINTS.SETUP.BASE() + ENDPOINTS.SETUP.PATH.ACCOUNT_LOGIN;
             const data = {
                 dsWebAuthToken: Resources.manager().sessionSecret,
+                extended_login: true,
+                trustToken: Resources.manager().trustToken,
             };
 
             const response = await Resources.network().post(url, data);
