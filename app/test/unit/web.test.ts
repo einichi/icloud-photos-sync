@@ -8,7 +8,7 @@ import {iCPSMockedUIFunction, iCPSMockedUISite, sendMockedRequest} from "../_hel
 import {MFAMethod} from "../../src/lib/icloud/mfa/mfa-method";
 import {TokenApp} from "../../src/app/icloud-app";
 import {iCPSError} from "../../src/app/error/error";
-import {AUTH_ERR} from "../../src/app/error/error-codes";
+import {APP_ERR, AUTH_ERR} from "../../src/app/error/error-codes";
 import webpush from 'web-push';
 import {configure, getByTestId} from "@testing-library/dom";
 import '@testing-library/jest-dom/jest-globals';
@@ -1274,6 +1274,27 @@ describe.each([
                 mockedResourceManager._resources.password = `wrongPass`;
                 mockedEventManager.emit(iCPSEventWebServer.REAUTH_REQUESTED)
                 mockedEventManager.emit(iCPSEventWebServer.REAUTH_ERROR, new iCPSError(AUTH_ERR.UNAUTHORIZED))
+                mockedState.timestamp = 1000
+                await site.load(`${webBasePath}/state`)
+
+                await site.dom.window.refreshState()
+
+                expect(getByTestId(site.body, `error-symbol`)).toBeVisible();
+                expect(getByTestId(site.body, `credential-container`)).toBeVisible();
+                expect(getByTestId(site.body, `sync-button`)).not.toBeVisible();
+                expect(getByTestId(site.body, `reauth-button`)).not.toBeVisible();
+                expect(getByTestId(site.body, `state-text`)).toHaveTextContent(`Your credentials seem to be invalid. Please check your iCloud credentials and try again.`);
+                expect(getByTestId(site.body, `copy-error-button`)).toBeVisible();
+            })
+
+            test(`Shows credential prompt after wrapped unauthorized token error for replaceable credentials`, async () => {
+                mockedResourceManager._resources.credentialsProvidedAtStartup = false;
+                mockedResourceManager._resources.username = `wrong@icloud.com`;
+                mockedResourceManager._resources.password = `wrongPass`;
+                mockedEventManager.emit(iCPSEventWebServer.REAUTH_REQUESTED)
+                mockedEventManager.emit(iCPSEventWebServer.REAUTH_ERROR, new iCPSError(APP_ERR.TOKEN)
+                    .addCause(new iCPSError(AUTH_ERR.FAILED)
+                        .addCause(new iCPSError(AUTH_ERR.UNAUTHORIZED))))
                 mockedState.timestamp = 1000
                 await site.load(`${webBasePath}/state`)
 

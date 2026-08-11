@@ -1,7 +1,7 @@
 import {beforeEach, describe, expect, jest, test} from "@jest/globals"
 import {LogLevel, LogMessage, SerializedState, StateManager, StateTrigger} from "../../src/lib/resources/state-manager"
 import {iCPSError} from "../../src/app/error/error"
-import {AUTH_ERR, MFA_ERR, SYNC_ERR, WEB_SERVER_ERR} from "../../src/app/error/error-codes"
+import {APP_ERR, AUTH_ERR, MFA_ERR, SYNC_ERR, WEB_SERVER_ERR} from "../../src/app/error/error-codes"
 import {MockedEventManager, prepareResources} from "../_helpers/_general"
 import {iCPSEvent, iCPSEventApp, iCPSEventCloud, iCPSEventLog, iCPSEventMFA, iCPSEventPhotos, iCPSEventRuntimeError, iCPSEventRuntimeWarning, iCPSEventSyncEngine, iCPSEventWebServer, iCPSState} from "../../src/lib/resources/events-types"
 import {Resources} from "../../src/lib/resources/main"
@@ -585,6 +585,22 @@ describe(`State changes`, () => {
         Resources.manager()._resources.credentialsProvidedAtStartup = false;
         mockedEventManager.emit(iCPSEventWebServer.REAUTH_REQUESTED);
         mockedEventManager.emit(iCPSEventWebServer.REAUTH_ERROR, new iCPSError(AUTH_ERR.UNAUTHORIZED));
+
+        expect(mockedState.serialize()).toEqual(expect.objectContaining({
+            credentialRetryRequired: true,
+            prevError: {
+                code: `AUTH_UNAUTHORIZED`,
+                message: `Your credentials seem to be invalid. Please check your iCloud credentials and try again.`,
+            },
+        }));
+    })
+
+    test(`Should require credential retry on wrapped unauthorized token error when credentials are replaceable`, () => {
+        Resources.manager()._resources.credentialsProvidedAtStartup = false;
+        mockedEventManager.emit(iCPSEventWebServer.REAUTH_REQUESTED);
+        mockedEventManager.emit(iCPSEventWebServer.REAUTH_ERROR, new iCPSError(APP_ERR.TOKEN)
+            .addCause(new iCPSError(AUTH_ERR.FAILED)
+                .addCause(new iCPSError(AUTH_ERR.UNAUTHORIZED))));
 
         expect(mockedState.serialize()).toEqual(expect.objectContaining({
             credentialRetryRequired: true,

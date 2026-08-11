@@ -619,12 +619,14 @@ export class StateManager {
             /**
              * If possible, this will try to convert known error codes into user-friendly messages
              */
+            if (this.hasPreviousErrorCode(AUTH_ERR.UNAUTHORIZED.code)) {
+                error.message = `Your credentials seem to be invalid. Please check your iCloud credentials and try again.`;
+                error.code = AUTH_ERR.UNAUTHORIZED.code;
+            }
+
             switch (error.code) {
             case MFA_ERR.FAIL_ON_MFA.code:
                 error.message = `MFA code required. Use the 'Renew Authentication' button to request and enter a new code.`;
-                break;
-            case AUTH_ERR.UNAUTHORIZED.code:
-                error.message = `Your credentials seem to be invalid. Please check your iCloud credentials and try again.`;
                 break;
             case WEB_SERVER_ERR.MFA_CODE_NOT_PROVIDED.code:
                 error.message = `MFA code not provided within timeout period. Use the 'Renew Authentication' button to request and enter a new code.`;
@@ -665,8 +667,12 @@ export class StateManager {
     }
 
     private isCredentialRetryRequired(): boolean {
-        return this.prevError?.getRootErrorCode() === AUTH_ERR.UNAUTHORIZED.code
+        return this.hasPreviousErrorCode(AUTH_ERR.UNAUTHORIZED.code)
             && !Resources.manager().credentialsProvidedAtStartup;
+    }
+
+    private hasPreviousErrorCode(code: string): boolean {
+        return this.prevError?.getErrorCodeStack(true).includes(code) ?? false;
     }
 
     /**
